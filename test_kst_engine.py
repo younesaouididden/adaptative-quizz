@@ -6,9 +6,12 @@ cas d'or (chapitre indique dans le nom de la classe). Objectif : que
 n'importe quel refactor futur casse un test avant de casser le mémoire.
 """
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
+import kst_engine
 from kst_engine import (
     EPS,
     Concept,
@@ -25,6 +28,8 @@ from kst_engine import (
     should_stop,
     simulate,
     make_demo_domain,
+    _question_bank,
+    _OFFSET_POOL,
 )
 
 
@@ -374,6 +379,17 @@ class TestSimulate:
                  for s, z in enumerate(dom.Z)]
         assert np.mean(n_adapt) < np.mean(n_rand)
 
+    def test_select_next_appele_une_seule_fois_par_question(self, toy_domain):
+        """Regression : simulate() appelait select_next deux fois par
+        question posee en mode adaptatif (une fois dans should_stop pour le
+        3e critere d'arret, une fois de plus pour choisir la question),
+        doublant le cout O(|A|.|Z|) pour rien. On attend desormais un seul
+        appel par tour de boucle (questions posees + 1 verification finale)."""
+        z_true = toy_domain.Z[-1]
+        with patch("kst_engine.select_next", wraps=kst_engine.select_next) as spy:
+            r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=100)
+        assert spy.call_count == r["n_questions"] + 1
+
     def test_diagnostic_exact_depasse_85_pourcent(self):
         """Critere d'acceptation du Sprint 0 (PROMPT_DEMARRAGE section 5)."""
         dom = make_demo_domain(questions_per_concept=3)
@@ -386,3 +402,22 @@ class TestSimulate:
         if np.mean(acc) < 0.85:
             pytest.xfail("domaine jouet non calibre : critere vise avec le vrai domaine (Sprint 3)")
         assert np.mean(acc) >= 0.85
+
+
+# ---------------------------------------------------------------------------
+# _question_bank (domaine jouet)
+# ---------------------------------------------------------------------------
+
+class TestQuestionBank:
+
+    def test_taille_normale_ok(self):
+        qs = _question_bank("c", 0.10, 0.20, n=len(_OFFSET_POOL))
+        assert len(qs) == len(_OFFSET_POOL)
+
+    def test_leve_plutot_que_tronquer_silencieusement(self):
+        """Regression : _question_bank(n=...) au-dela de la taille de
+        _OFFSET_POOL renvoyait silencieusement moins de questions que
+        demande (slicing [:n] sur une liste plus courte). Doit desormais
+        lever explicitement plutot que mentir sur la taille de la banque."""
+        with pytest.raises(ValueError, match="offsets predefinis"):
+            _question_bank("c", 0.10, 0.20, n=len(_OFFSET_POOL) + 1)

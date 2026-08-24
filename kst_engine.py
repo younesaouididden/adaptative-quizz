@@ -256,13 +256,21 @@ def select_next(p: np.ndarray, domain: Domain,
 def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
                 max_questions: int = 30,
                 confidence: float = 0.85,
-                min_ig: float = 0.01) -> bool:
-    """Trois criteres d'arret (chapitre 7), le premier qui se declenche gagne."""
+                min_ig: float = 0.01,
+                ig: float | None = None) -> bool:
+    """Trois criteres d'arret (chapitre 7), le premier qui se declenche gagne.
+
+    ig : gain d'information de la meilleure question restante, si deja
+    calcule par select_next (c'est le cas dans simulate). Sinon il est
+    recalcule ici -- pratique pour appeler should_stop seul (tests), mais
+    coute O(|A|.|Z|) : ne pas l'omettre dans une boucle chaude.
+    """
     if len(asked) >= min(max_questions, domain.n_questions):
         return True
     if p.max() >= confidence:                       # un etat domine
         return True
-    _, ig = select_next(p, domain, asked)           # plus rien a apprendre
+    if ig is None:
+        _, ig = select_next(p, domain, asked)        # plus rien a apprendre
     return ig < min_ig
 
 
@@ -278,12 +286,15 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
     asked: set[int] = set()
     trace = [entropy(p)]
 
-    while not should_stop(p, domain, asked, max_questions=max_questions):
-        if adaptive:
-            q, _ = select_next(p, domain, asked)
-        else:
-            q = int(rng.choice([i for i in range(domain.n_questions)
-                                if i not in asked]))
+    while True:
+        # select_next calcule aussi le critere d'arret 3 (chapitre 7) : on le
+        # passe a should_stop plutot que le laisser le recalculer, ce qui
+        # evite de payer deux fois O(|A|.|Z|) par question posee.
+        q_best, ig = select_next(p, domain, asked)
+        if should_stop(p, domain, asked, max_questions=max_questions, ig=ig):
+            break
+        q = q_best if adaptive else int(rng.choice(
+            [i for i in range(domain.n_questions) if i not in asked]))
         question = domain.questions[q]
         # l'etudiant repond selon le vrai BLIM
         true_p = (1 - question.slip) if question.concept in z_true else question.guess
@@ -328,6 +339,9 @@ _BASE_SLIP_GUESS = {
 }
 
 
+_OFFSET_POOL = [0.0, 0.02, -0.02, 0.04, -0.04, 0.03, -0.03, 0.01, -0.01, 0.015]
+
+
 def _question_bank(concept: str, base_slip: float, base_guess: float,
                    n: int) -> list[Question]:
     """n questions synthetiques pour un concept, avec un slip/guess legerement
@@ -336,7 +350,13 @@ def _question_bank(concept: str, base_slip: float, base_guess: float,
     Le vrai domaine chargera sa banque depuis un fichier YAML/JSON, pas
     depuis du code en dur (voir PROMPT_DEMARRAGE section 8).
     """
-    offsets = [0.0, 0.02, -0.02, 0.04, -0.04, 0.03, -0.03, 0.01, -0.01, 0.015][:n]
+    if n > len(_OFFSET_POOL):
+        raise ValueError(
+            f"_question_bank({concept!r}, n={n}) : seulement "
+            f"{len(_OFFSET_POOL)} offsets predefinis pour le domaine jouet. "
+            "Augmenter _OFFSET_POOL, ou passer par un domaine reel (YAML) "
+            "pour une banque plus large.")
+    offsets = _OFFSET_POOL[:n]
     return [Question(id=f"{concept}_q{i+1}", concept=concept,
                      slip=round(min(0.30, max(0.01, base_slip + off)), 3),
                      guess=round(min(0.35, max(0.05, base_guess - off)), 3))
