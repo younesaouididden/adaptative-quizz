@@ -1,0 +1,47 @@
+schema_version: 1
+domain: junyi_math_v1
+description: 'Domaine derive de Junyi15 (piste A) : concepts agreges par area/topic,
+  prerequis par test binomial (alpha=0.1) + 1 lien editorial (calculus -> probability_statistics).
+  slip/guess non presents : calibres par EM en tache A2.'
+concepts:
+- id: algebra_advanced
+  label: Algebre avancee (polynomes, fonctions)
+- id: algebra_linear
+  label: Algebre lineaire (equations, inequations)
+- id: analytic_geometry
+  label: Geometrie analytique et trigonometrie
+- id: arithmetic_base
+  label: Arithmetique de base
+- id: calculus
+  label: Calcul differentiel
+- id: fractions_ratios
+  label: Fractions et proportions
+- id: geometry
+  label: Geometrie
+- id: logics
+  label: Logique
+- id: probability_statistics
+  label: Probabilites et statistiques
+prerequisites:
+- - algebra_advanced
+  - analytic_geometry
+- - algebra_advanced
+  - calculus
+- - algebra_advanced
+  - fractions_ratios
+- - algebra_linear
+  - algebra_advanced
+- - analytic_geometry
+  - calculus
+- - arithmetic_base
+  - fractions_ratios
+- - arithmetic_base
+  - geometry
+- - arithmetic_base
+  - probability_statistics
+- - calculus
+  - probability_statistics
+- - fractions_ratios
+  - geometry
+- - logics
+  - geometry
