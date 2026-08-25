@@ -5,12 +5,26 @@ de 26M lignes.
 
 import pandas as pd
 
-from d0_correct_definition import accumulate_problem_number_histogram, spot_check_sequential
+from d0_correct_definition import (
+    accumulate_correctness_and_review,
+    accumulate_problem_number_histogram,
+    check_pn_counts_non_increasing,
+    spot_check_sequential,
+)
 
 
 def _write_log(tmp_path, rows):
     df = pd.DataFrame(rows, columns=["user_id", "exercise", "problem_number",
                                      "hint_used", "count_hints"])
+    path = tmp_path / "junyi_ProblemLog_original.csv"
+    df.to_csv(path, index=False)
+    return path
+
+
+def _write_full_log(tmp_path, rows):
+    """Comme _write_log, mais avec les colonnes 'correct' et 'review_mode'
+    necessaires a accumulate_correctness_and_review (R1/R4/R5)."""
+    df = pd.DataFrame(rows, columns=["problem_number", "correct", "review_mode"])
     path = tmp_path / "junyi_ProblemLog_original.csv"
     df.to_csv(path, index=False)
     return path
@@ -83,3 +97,55 @@ class TestSpotCheckSequential:
         result = spot_check_sequential(log_path=path, candidate_scan_rows=100, chunk_size=2)
         assert result["n_paires_testees"] == 1
         assert result["n_sequentielles_1_a_N"] == 1
+
+
+# ---------------------------------------------------------------------------
+# R1 / R4 / R5 (docs/revue_d0.md)
+# ---------------------------------------------------------------------------
+
+class TestAccumulateCorrectnessAndReview:
+
+    def test_taux_de_reussite_par_problem_number(self, tmp_path):
+        # problem_number=1 : 1 correct / 2 lignes (50%) ; pn=2 : 2/2 (100%)
+        rows = [
+            (1, "true", "false"), (1, "false", "false"),
+            (2, "true", "false"), (2, "true", "false"),
+        ]
+        path = _write_full_log(tmp_path, rows)
+        result = accumulate_correctness_and_review(log_path=path, chunk_size=2)
+        assert result["pn_correct"][1] == 1
+        assert result["pn_counts"][1] == 2
+        assert result["pn_correct"][2] == 2
+        assert result["pn_counts"][2] == 2
+
+    def test_compte_review_mode(self, tmp_path):
+        rows = [(1, "true", "true"), (1, "true", "false"), (2, "true", "false")]
+        path = _write_full_log(tmp_path, rows)
+        result = accumulate_correctness_and_review(log_path=path, chunk_size=10)
+        assert result["n_review"] == 1
+        assert result["n_rows"] == 3
+
+
+class TestCheckPnCountsNonIncreasing:
+
+    def test_ok_si_decroissant(self):
+        r = check_pn_counts_non_increasing(pd.Series({1: 100, 2: 50, 3: 10}))
+        assert r["ok"]
+        assert r["n_violations"] == 0
+
+    def test_rapporte_la_vraie_valeur_de_problem_number_en_cas_de_hausse(self):
+        """Regression : la premiere version rapportait une POSITION dans la
+        serie triee (sans rapport avec problem_number des que l'index ne
+        commence pas a 0 ou saute des valeurs), pas la vraie valeur."""
+        r = check_pn_counts_non_increasing(pd.Series({1: 10, 5: 50, 9: 5}))
+        assert not r["ok"]
+        assert r["n_violations"] == 1
+        assert r["premiere_violation_problem_number"] == 5   # pas "1" (la position)
+        assert r["premiere_violation_hausse"] == 40
+        assert r["n_paires_a_la_premiere_violation"] == 50
+
+    def test_plateau_accepte(self):
+        """Une egalite (pas de hausse stricte) ne doit pas etre rejetee --
+        seule une VRAIE hausse signe une violation de la numerotation."""
+        r = check_pn_counts_non_increasing(pd.Series({1: 10, 2: 10, 3: 5}))
+        assert r["ok"]
