@@ -6,22 +6,49 @@ description: 'Domaine derive de Junyi15 (piste A) : concepts agreges par area/to
 concepts:
 - id: algebra_advanced
   label: Algebre avancee (polynomes, fonctions)
+  slip: 0.2084
+  guess: 0.4036
+  calibrated: true
 - id: algebra_linear
   label: Algebre lineaire (equations, inequations)
+  slip: 0.1856
+  guess: 0.5155
+  calibrated: true
 - id: analytic_geometry
   label: Geometrie analytique et trigonometrie
+  slip: 0.123
+  guess: 0.6255
+  calibrated: true
 - id: arithmetic_base
   label: Arithmetique de base
+  slip: 0.0961
+  guess: 0.7555
+  calibrated: true
 - id: calculus
   label: Calcul differentiel
+  slip: 0.3392
+  guess: 0.2639
+  calibrated: true
 - id: fractions_ratios
   label: Fractions et proportions
+  slip: 0.1409
+  guess: 0.6853
+  calibrated: true
 - id: geometry
   label: Geometrie
+  slip: 0.1175
+  guess: 0.7093
+  calibrated: true
 - id: logics
   label: Logique
+  slip: 0.451
+  guess: 0.1834
+  calibrated: true
 - id: probability_statistics
   label: Probabilites et statistiques
+  slip: 0.1093
+  guess: 0.741
+  calibrated: true
 prerequisites:
 - - algebra_advanced
   - analytic_geometry
