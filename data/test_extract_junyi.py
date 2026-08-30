@@ -44,26 +44,23 @@ class TestBuildExerciseEdges:
 
 
 # ---------------------------------------------------------------------------
-# concept_of
+# concept_of -- V1 simplifiee : concept = area brute normalisee
 # ---------------------------------------------------------------------------
 
 class TestConceptOf:
 
-    def test_topic_override_prioritaire(self):
-        assert concept_of("arithmetic", "fractions") == "fractions_ratios"
-
     def test_area_normalisee_underscore(self):
-        assert concept_of("probability-statistics", "probability") == "probability_statistics"
+        assert concept_of("probability-statistics") == "probability_statistics"
+
+    def test_area_sans_tiret_inchangee(self):
+        assert concept_of("geometry") == "geometry"
 
     def test_area_exclue_renvoie_none(self):
         for area in EXCLUDED_AREAS:
-            assert concept_of(area, "whatever") is None
-
-    def test_area_arithmetic_sans_topic_mappe_renvoie_none(self):
-        assert concept_of("arithmetic", "topic_inconnu") is None
+            assert concept_of(area) is None
 
     def test_area_nan_renvoie_none(self):
-        assert concept_of(float("nan"), "fractions") is None
+        assert concept_of(float("nan")) is None
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +73,6 @@ class TestAggregateToConcepts:
         ex = pd.DataFrame({
             "name": ["a1", "a2"],
             "area": ["arithmetic", "arithmetic"],
-            "topic": ["addition-subtraction", "addition-subtraction"],
         })
         _, dir_counts = aggregate_to_concepts(ex, [("a1", "a2")])
         assert dir_counts == Counter()
@@ -85,15 +81,19 @@ class TestAggregateToConcepts:
         ex = pd.DataFrame({
             "name": ["a1", "g1"],
             "area": ["arithmetic", "geometry"],
-            "topic": ["addition-subtraction", "basic-geometry"],
         })
         name_to_concept, dir_counts = aggregate_to_concepts(ex, [("a1", "g1")])
-        assert name_to_concept == {"a1": "arithmetic_base", "g1": "geometry"}
-        assert dir_counts[("arithmetic_base", "geometry")] == 1
+        assert name_to_concept == {"a1": "arithmetic", "g1": "geometry"}
+        assert dir_counts[("arithmetic", "geometry")] == 1
 
     def test_exercice_exclu_absent_du_mapping(self):
-        ex = pd.DataFrame({"name": ["b1"], "area": ["biology"], "topic": ["x"]})
+        ex = pd.DataFrame({"name": ["b1"], "area": ["biology"]})
         name_to_concept, dir_counts = aggregate_to_concepts(ex, [])
+        assert name_to_concept == {}
+
+    def test_calculus_et_logics_exclus(self):
+        ex = pd.DataFrame({"name": ["c1", "l1"], "area": ["calculus", "logics"]})
+        name_to_concept, _ = aggregate_to_concepts(ex, [])
         assert name_to_concept == {}
 
 
@@ -141,41 +141,36 @@ class TestBuildDomain:
 
     def test_domaine_synthetique_acyclique_et_connexe(self, tmp_path):
         """Petit dataset synthetique reproduisant la forme du vrai probleme
-        (conflit faible a ignorer, lien fort a garder, area isolee a
-        exclure) -- verifie tout le pipeline sans toucher au fichier Junyi
-        reel de 837 lignes."""
+        (conflit faible a ignorer, lien fort a garder, areas exclues) --
+        verifie tout le pipeline sans toucher au fichier Junyi reel."""
         ex = pd.DataFrame({
-            "name":  ["ar1", "ar2", "ar3", "fr1", "ge1", "bi1"],
-            "area":  ["arithmetic", "arithmetic", "arithmetic", "arithmetic", "geometry", "biology"],
-            "topic": ["addition-subtraction"] * 3 + ["fractions", "basic-geometry", "x"],
-            "prerequisites": [None, "ar1", "ar1", "ar2, ar3", "fr1", None],
+            "name":  ["ar1", "ar2", "ar3", "ge1", "bi1", "ca1"],
+            "area":  ["arithmetic", "arithmetic", "arithmetic", "geometry", "biology", "calculus"],
+            "prerequisites": [None, "ar1", "ar1", "ar1", None, None],
         })
         raw_dir = tmp_path
         ex.to_csv(raw_dir / "junyi_Exercise_table.csv", index=False)
 
         concepts, prereqs, report, name_to_concept = build_domain(raw_dir=raw_dir)
 
-        assert "biology" not in "".join(concepts)  # area exclue absente
-        assert set(concepts) == {"arithmetic_base", "fractions_ratios", "geometry"}
-        assert ("arithmetic_base", "fractions_ratios") in prereqs
-        assert ("fractions_ratios", "geometry") in prereqs
+        assert set(concepts) == {"arithmetic", "geometry"}  # biology/calculus exclus
+        assert ("arithmetic", "geometry") in prereqs
 
         Z = build_knowledge_space(concepts, prereqs)
         assert len(Z) <= 2 ** len(concepts)  # acyclique (sinon ValueError deja levee)
 
-    def test_leve_si_biais_editorial_introduit_un_cycle(self, tmp_path, monkeypatch):
+    def test_leve_si_lien_editorial_introduit_un_cycle(self, tmp_path, monkeypatch):
         """Si un lien editorial (MANUAL_EDGES) contredit les liens empiriques
         au point de creer un cycle, build_domain doit lever plutot que
         produire silencieusement un domaine incoherent."""
         import extract_junyi
         ex = pd.DataFrame({
-            "name":  ["ar1", "fr1"],
-            "area":  ["arithmetic", "arithmetic"],
-            "topic": ["addition-subtraction", "fractions"],
+            "name":  ["ar1", "ge1"],
+            "area":  ["arithmetic", "geometry"],
             "prerequisites": [None, "ar1"],
         })
         ex.to_csv(tmp_path / "junyi_Exercise_table.csv", index=False)
         monkeypatch.setattr(extract_junyi, "MANUAL_EDGES",
-                            [("fractions_ratios", "arithmetic_base")])
+                            [("geometry", "arithmetic")])
         with pytest.raises(ValueError, match="Cycle"):
             build_domain(raw_dir=tmp_path)

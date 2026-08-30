@@ -81,7 +81,7 @@ class TestExtract:
 
         table = pq.read_table(out_path).to_pandas()
         assert len(table) == 3
-        assert set(table["concept_id"]) == {"arithmetic_base", "geometry"}
+        assert set(table["concept_id"]) == {"arithmetic", "geometry"}
         assert table["correct"].dtype == bool
 
     def test_chunking_ne_perd_ni_ne_duplique_de_lignes(self, tmp_path):

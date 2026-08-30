@@ -10,6 +10,17 @@ graphe d'abord).
 Pas de slip/guess/questions dans ce YAML : piste A calibre slip/guess par
 EM sur les logs reels (tache A2), ce fichier n'a pas besoin des champs de
 banque de questions de piste B.
+
+SIMPLIFICATION V1 (2026-08-25) : la version precedente subdivisait
+arithmetic/algebra par topic pour atteindre 9 concepts (cf. git history).
+Le diagnostic docs/diagnostic_guess.md (D0/tour 2) a montre que la
+granularite fine degradait l'identifiabilite de l'EM (trop peu
+d'observations par (etudiant, concept) une fois subdivise). Avec la
+deadline de stage qui approche, on revient a la granularite 'area' brute
+(5 concepts, deja connexes -- cf. exploration A1) pour une V1 qui
+fonctionne, quitte a affiner la granularite dans une iteration
+ulterieure. calculus/logics restent exclus : trop peu d'exercices (10 et
+5) pour peser sur l'identifiabilite meme a cette granularite.
 """
 
 from __future__ import annotations
@@ -35,51 +46,24 @@ OUT_PATH = Path(__file__).resolve().parent / "domain.yaml"
 # prefererait obtenir (discussion PROMPT_PISTE_A, 2026-08-25).
 ALPHA = 0.10
 
-# Regroupement topic -> concept pour les deux areas les plus volumineuses
-# (arithmetic 301 ex., algebra 258 ex.) : necessaire pour depasser le
-# minimum de 8 concepts une fois l'area isolee (biology) retiree.
-# Justification pedagogique : separe les bases de calcul direct des
-# notions proportionnelles (arithmetic), et le lineaire de l'avance
-# (algebra).
-TOPIC_OVERRIDES = {
-    "addition-subtraction": "arithmetic_base", "multiplication-division": "arithmetic_base",
-    "order-of-operations": "arithmetic_base", "quantity-sense": "arithmetic_base",
-    "telling-time": "arithmetic_base", "factors-multiples": "arithmetic_base",
-    "fractions": "fractions_ratios", "decimals": "fractions_ratios",
-    "ratio-percentage": "fractions_ratios", "rates-and-ratios": "fractions_ratios",
-    "unit-conversion": "fractions_ratios", "sequence_and_series": "fractions_ratios",
-    "absolute-value": "algebra_linear", "linear-equations-and-inequalitie": "algebra_linear",
-    "solving-linear-equations-and-inequalities": "algebra_linear", "systems-of-eq-and-ineq": "algebra_linear",
-    "quadtratics": "algebra_advanced", "polynomials": "algebra_advanced",
-    "exponents-radicals": "algebra_advanced", "complex-numbers": "algebra_advanced",
-    "algebra-functions": "algebra_advanced", "conic-sections": "algebra_advanced",
-    "vectors-matrix": "algebra_advanced", "pythagorean-theorem": "algebra_advanced",
-}
+# V1 simplifiee : granularite 'area' brute, pas de subdivision par topic.
+# biology (composante isolee, aucun lien de prerequis vers le reste),
+# calculus et logics (10 et 5 exercices -- trop peu pour peser sur
+# l'identifiabilite, cf. docstring module) sont exclus.
+EXCLUDED_AREAS = {"biology", "calculus", "logics"}
 
-# geometry / analytic-geometry / probability-statistics / calculus / logics
-# restent a la granularite 'area' : assez petits pour ne pas necessiter de
-# subdivision (cf. rapport d'exploration -- 30 a 161 exercices chacun).
-
-EXCLUDED_AREAS = {"biology"}  # composante isolee : aucun lien de prerequis vers le reste
-
-# Ajout editorial (decision utilisateur, PROMPT_PISTE_A, 2026-08-25) : Junyi
-# ne modelise aucun lien calculus -> probability-statistics car son contenu
-# de proba/stats est discret (denombrement, moyenne/ecart-type), jamais de
-# proba continue. On l'ajoute quand meme pour rester fidele a la structure
-# mathematique reelle (proba continue = integration), meme si elle n'est
-# pas observee dans CE dataset. Ce lien n'est PAS derive des donnees.
-MANUAL_EDGES = [("calculus", "probability_statistics")]
+# Liens editoriaux (non derives des donnees) : aucun pour l'instant. Le
+# lien calculus -> probability_statistics envisage a une granularite plus
+# fine (PROMPT_PISTE_A, 2026-08-25) ne s'applique plus, calculus etant
+# exclu de cette V1.
+MANUAL_EDGES: list[tuple[str, str]] = []
 
 CONCEPT_LABELS = {
-    "arithmetic_base": "Arithmetique de base",
-    "fractions_ratios": "Fractions et proportions",
-    "algebra_linear": "Algebre lineaire (equations, inequations)",
-    "algebra_advanced": "Algebre avancee (polynomes, fonctions)",
+    "arithmetic": "Arithmetique",
+    "algebra": "Algebre",
     "geometry": "Geometrie",
     "analytic_geometry": "Geometrie analytique et trigonometrie",
     "probability_statistics": "Probabilites et statistiques",
-    "calculus": "Calcul differentiel",
-    "logics": "Logique",
 }
 
 
@@ -87,17 +71,13 @@ def load_exercise_table(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
     return pd.read_csv(raw_dir / "junyi_Exercise_table.csv")
 
 
-def concept_of(area: str, topic: str) -> str | None:
-    """Concept = override par topic si defini (arithmetic/algebra subdivises),
-    sinon l'area elle-meme. None si l'exercice doit etre exclu (area isolee
-    ou area/topic manquants)."""
+def concept_of(area: str) -> str | None:
+    """Concept = l'area Junyi elle-meme (granularite V1, voir docstring
+    module), normalisee en style underscore. None si l'exercice doit etre
+    exclu (area isolee, trop petite, ou manquante)."""
     if pd.isna(area) or area in EXCLUDED_AREAS:
         return None
-    if topic in TOPIC_OVERRIDES:
-        return TOPIC_OVERRIDES[topic]
-    if area in ("arithmetic", "algebra"):
-        return None  # topic non couvert par le mapping -- ne devrait pas arriver
-    return area.replace("-", "_")  # normalise sur le style underscore (cf. TOPIC_OVERRIDES)
+    return area.replace("-", "_")
 
 
 def build_exercise_edges(ex: pd.DataFrame) -> list[tuple[str, str]]:
@@ -126,10 +106,9 @@ def aggregate_to_concepts(ex: pd.DataFrame, edges: list[tuple[str, str]]
     concept->concept (les liens intra-concept ne comptent pas : ils ne
     disent rien sur l'ordre entre CONCEPTS)."""
     name_to_area = dict(zip(ex["name"], ex["area"]))
-    name_to_topic = dict(zip(ex["name"], ex["topic"]))
     name_to_concept = {
         name: c for name in ex["name"]
-        if (c := concept_of(name_to_area.get(name), name_to_topic.get(name))) is not None
+        if (c := concept_of(name_to_area.get(name))) is not None
     }
 
     dir_counts = Counter()
@@ -218,11 +197,11 @@ def write_domain_yaml(concepts: list[str], prereqs: list[tuple[str, str]],
     data = {
         "schema_version": 1,
         "domain": "junyi_math_v1",
-        "description": ("Domaine derive de Junyi15 (piste A) : concepts agreges "
-                        "par area/topic, prerequis par test binomial (alpha="
-                        f"{ALPHA}) + 1 lien editorial (calculus -> "
-                        "probability_statistics). slip/guess non presents : "
-                        "calibres par EM en tache A2."),
+        "description": ("Domaine derive de Junyi15 (piste A), V1 simplifiee : "
+                        "concepts = areas Junyi brutes (biology/calculus/logics "
+                        "exclus), prerequis par test binomial (alpha="
+                        f"{ALPHA}). slip/guess non presents : calibres par EM "
+                        "en tache A2."),
         "concepts": [{"id": c, "label": CONCEPT_LABELS.get(c, c)} for c in concepts],
         "prerequisites": [[a, b] for a, b in prereqs],
     }
@@ -255,8 +234,13 @@ if __name__ == "__main__":
         print(f"  {c:20s} : {sizes[c]}")
     print(f"  (total mappe : {sum(sizes.values())} / 837)")
 
-    if not (30 <= len(Z) <= 500):
-        print(f"\n!!! ATTENTION : |Z|={len(Z)} hors de la fourchette [30,500] !!!")
+    # Fourchette [30,500] de l'addendum pensee pour 8-14 concepts. La V1
+    # simplifiee (5 concepts, cf. docstring module) descend mecaniquement en
+    # dessous -- borne basse assouplie ici (V1 : priorite a une version qui
+    # marche), borne haute conservee (garde-fou contre l'explosion
+    # combinatoire, chapitre 2).
+    if not (1 <= len(Z) <= 500):
+        print(f"\n!!! ATTENTION : |Z|={len(Z)} hors de la fourchette geree [1,500] !!!")
     else:
         write_domain_yaml(concepts, prereqs)
         print(f"\nEcrit : {OUT_PATH}")
