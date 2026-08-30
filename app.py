@@ -99,6 +99,7 @@ def pick_next(domain):
         st.session_state.stage = "results"
         st.session_state.current_q = None
     else:
+        st.session_state.stage = "quiz"
         st.session_state.current_q = q
 
 
