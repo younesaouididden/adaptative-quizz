@@ -1,25 +1,23 @@
 """
 Demo Streamlit du quiz adaptatif : reutilise directement kst_engine.py et
-data/domain.yaml (5 concepts, slip/guess calibres par EM sur les logs reels
-Junyi Academy, tache A2) -- aucune reimplementation, le moteur qui tourne
-ici est exactement celui teste dans test_kst_engine.py.
+domains/piste_b.yaml (7 concepts, 35 questions ecrites a la main) -- aucune
+reimplementation, le moteur qui tourne ici est exactement celui teste dans
+test_kst_engine.py.
 
-La banque de questions (QUESTION_BANK ci-dessous) est ecrite a la main :
-Junyi ne fournit que des logs d'interaction, pas d'enonces (piste B,
-authorship de questions, en pause -- cf. ADDENDUM_BANQUE_QUESTIONS.md).
-Chaque question herite du slip/guess calibre de son concept.
+Domaine piste B (cf. ADDENDUM_BANQUE_QUESTIONS.md, domains/piste_b.yaml) :
+slip/guess sont des valeurs EXPERTES non calibrees (guess = 1/nb_options,
+slip = 0.10), pas le resultat d'une calibration EM sur des donnees reelles.
+La calibration reelle (piste A, data/domain.yaml) est un pipeline separe,
+sur un domaine a 5 concepts issu des logs Junyi Academy.
 """
 
 from pathlib import Path
 
 import numpy as np
 import streamlit as st
-import yaml
 
+from domains.loader import load_domain_yaml
 from kst_engine import (
-    Concept,
-    Domain,
-    Question,
     bayes_update,
     concept_marginals,
     entropy,
@@ -28,60 +26,12 @@ from kst_engine import (
     uniform_prior,
 )
 
-DOMAIN_PATH = Path(__file__).resolve().parent / "data" / "domain.yaml"
-
-QUESTION_BANK = {
-    "arithmetic": [
-        ("Combien font 7 × 8 ?", ["54", "56", "64", "72"], 1),
-        ("Que vaut 3/4 + 1/8 ?", ["7/8", "1/2", "5/8", "1"], 0),
-        ("15 % de 200, ça fait combien ?", ["15", "20", "30", "40"], 2),
-        ("Simplifie 24/36.", ["3/4", "2/3", "4/6", "1/2"], 1),
-    ],
-    "algebra": [
-        ("Résous : 2x + 5 = 13", ["x = 3", "x = 4", "x = 5", "x = 9"], 1),
-        ("Factorise x² − 9.", ["(x−3)(x+3)", "(x−9)(x+1)", "(x−3)²", "(x+3)²"], 0),
-        ("Résous : 3x − 7 = 2x + 1", ["x = 6", "x = 7", "x = 8", "x = −8"], 2),
-        ("Développe (x+2)(x−2).", ["x² − 4", "x² + 4", "x² − 4x + 4", "x² + 4x − 4"], 0),
-    ],
-    "geometry": [
-        ("Aire d'un rectangle 5 × 3 ?", ["8", "15", "16", "30"], 1),
-        ("Somme des angles d'un triangle ?", ["90°", "180°", "270°", "360°"], 1),
-        ("Périmètre d'un carré de côté 6 ?", ["12", "18", "24", "36"], 2),
-        ("Aire d'un cercle de rayon 2 (en fonction de π) ?", ["2π", "4π", "8π", "16π"], 1),
-    ],
-    "analytic_geometry": [
-        ("Pente de la droite passant par (0,0) et (2,4) ?", ["1", "2", "4", "1/2"], 1),
-        ("Distance entre (0,0) et (3,4) ?", ["4", "5", "6", "7"], 1),
-        ("Équation de la droite de pente 2 passant par l'origine ?",
-         ["y = 2x", "y = x + 2", "y = 2x + 1", "x = 2y"], 0),
-    ],
-    "probability_statistics": [
-        ("Probabilité d'obtenir Pile avec une pièce équilibrée ?", ["1/4", "1/3", "1/2", "1"], 2),
-        ("Moyenne de {2, 4, 6} ?", ["3", "4", "5", "6"], 1),
-        ("Probabilité d'obtenir un 6 avec un dé équilibré ?", ["1/2", "1/4", "1/6", "1/8"], 2),
-    ],
-}
+DOMAIN_PATH = Path(__file__).resolve().parent / "domains" / "piste_b.yaml"
 
 
 @st.cache_resource
 def load_domain():
-    with open(DOMAIN_PATH, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    concepts = [Concept(c["id"]) for c in data["concepts"]]
-    labels = {c["id"]: c.get("label", c["id"]) for c in data["concepts"]}
-    slip_guess = {c["id"]: (c["slip"], c["guess"]) for c in data["concepts"]}
-    prereqs = [tuple(p) for p in data["prerequisites"]]
-
-    questions, meta = [], []
-    for concept_id, items in QUESTION_BANK.items():
-        slip, guess = slip_guess[concept_id]
-        for i, (stem, options, answer) in enumerate(items):
-            questions.append(Question(f"{concept_id}_{i + 1}", concept_id, slip=slip, guess=guess))
-            meta.append({"stem": stem, "options": options, "answer": answer})
-
-    domain = Domain(concepts=concepts, prereqs=prereqs, questions=questions)
-    return domain, meta, labels
+    return load_domain_yaml(DOMAIN_PATH)
 
 
 def init_state(domain):
@@ -120,7 +70,7 @@ if "stage" not in st.session_state:
 st.markdown(
     "<p style='font-family:monospace;color:#0E7C7B;font-size:0.78rem;"
     "letter-spacing:0.08em;text-transform:uppercase;margin-bottom:-0.5rem;'>"
-    "Moteur KST &middot; domaine calibré sur Junyi Academy</p>",
+    "Moteur KST &middot; domaine piste B (démo, paramètres experts)</p>",
     unsafe_allow_html=True,
 )
 st.title("Diagnostic adaptatif")
@@ -131,9 +81,10 @@ if st.session_state.stage == "intro":
         "Pas de score final — un diagnostic, concept par concept."
     )
     st.write(
-        "5 domaines de maths (arithmétique, algèbre, géométrie, "
-        "géométrie analytique, probabilités/statistiques). Le moteur choisit "
-        "à chaque tour la question qui t'apprend le plus sur toi."
+        "7 domaines de maths (arithmétique de base, fractions/ratios, algèbre "
+        "linéaire, algèbre avancée, géométrie, géométrie analytique, "
+        "probabilités/statistiques). Le moteur choisit à chaque tour la "
+        "question qui t'apprend le plus sur toi."
     )
     if st.button("Commencer le diagnostic", type="primary"):
         pick_next(domain)
@@ -199,8 +150,9 @@ elif st.session_state.stage == "results":
                "(ses prérequis sont couverts d'après ton état estimé le plus probable).")
 
     st.caption(
-        "Sélection par gain d'information sur Δ(Z), mise à jour bayésienne (BLIM), "
-        "slip/guess calibrés par EM sur 25,7M réponses réelles (247k étudiants, Junyi Academy)."
+        "Sélection par gain d'information sur Δ(Z), mise à jour bayésienne (BLIM). "
+        "Domaine piste B : slip/guess sont des valeurs expertes non calibrées "
+        "(guess = 1/nb d'options, slip = 0,10), pas une calibration empirique."
     )
     if st.button("Recommencer"):
         init_state(domain)
