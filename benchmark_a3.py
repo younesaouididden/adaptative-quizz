@@ -62,7 +62,7 @@ DOMAIN_PATH = ROOT / "domains" / "piste_b.yaml"
 RESULTS_DIR = ROOT / "results" / "benchmark_a3"
 
 POLICY_LABELS = {
-    "adaptatif": "Adaptatif\n(gain d'info, KST)",
+    "adaptatif": "Adaptatif (π*)\n(gain d'info, KST)",
     "aleatoire": "Aléatoire",
     "cat_irt": "CAT-IRT\n(baseline 3PL)",
 }

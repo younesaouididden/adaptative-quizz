@@ -26,7 +26,7 @@ from kst_engine import (
     information_gain_mc,
     item_information,
     questions_needed,
-    select_next,
+    pi_star,
     should_stop,
     simulate,
     make_demo_domain,
@@ -345,17 +345,17 @@ class TestQuestionsNeeded:
         assert piste_a_haut > piste_a_bas
 
 
-class TestSelectNext:
+class TestPiStar:
 
     def test_ignore_les_questions_deja_posees(self, toy_domain):
         p = uniform_prior(toy_domain)
         asked = {0}
-        q, _ = select_next(p, toy_domain, asked)
+        q, _ = pi_star(p, toy_domain, asked)
         assert q not in asked
 
     def test_choisit_largmax_du_gain(self, toy_domain):
         p = uniform_prior(toy_domain)
-        q, ig = select_next(p, toy_domain, set())
+        q, ig = pi_star(p, toy_domain, set())
         all_ig = [information_gain_exact(p, toy_domain, i)
                  for i in range(toy_domain.n_questions)]
         assert ig == pytest.approx(max(all_ig))
@@ -371,7 +371,7 @@ class TestSelectNext:
         )
         p = uniform_prior(dom)
         asked = {0}                     # "a1" deja posee
-        q, _ = select_next(p, dom, asked)
+        q, _ = pi_star(p, dom, asked)
         assert q in (1, 2)               # "a2" ou "b1" restent eligibles
 
 
@@ -442,14 +442,14 @@ class TestSimulate:
                  for s, z in enumerate(dom.Z)]
         assert np.mean(n_adapt) < np.mean(n_rand)
 
-    def test_select_next_appele_une_seule_fois_par_question(self, toy_domain):
-        """Regression : simulate() appelait select_next deux fois par
+    def test_pi_star_appele_une_seule_fois_par_question(self, toy_domain):
+        """Regression : simulate() appelait pi_star deux fois par
         question posee en mode adaptatif (une fois dans should_stop pour le
         3e critere d'arret, une fois de plus pour choisir la question),
         doublant le cout O(|A|.|Z|) pour rien. On attend desormais un seul
         appel par tour de boucle (questions posees + 1 verification finale)."""
         z_true = toy_domain.Z[-1]
-        with patch("kst_engine.select_next", wraps=kst_engine.select_next) as spy:
+        with patch("kst_engine.pi_star", wraps=kst_engine.pi_star) as spy:
             r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=100)
         assert spy.call_count == r["n_questions"] + 1
 

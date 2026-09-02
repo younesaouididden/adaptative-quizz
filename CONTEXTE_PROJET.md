@@ -23,7 +23,7 @@ Fichiers de référence théorique/architecture dans le repo, **déjà lus et in
 ## 2. Ce qui existe et fonctionne (100 tests passent, `python -m pytest -q` à la racine)
 
 ### Moteur (`kst_engine.py`)
-Implémente les 4 couches KST : `build_knowledge_space` (chapitre 2), `Domain`/`Concept`/`Question` avec BLIM (chapitre 3), `bayes_update`/`entropy`/`information_gain_exact`/`select_next`/`should_stop` (chapitres 6-7). Concept et Question sont **séparés** (refactor fait tôt dans le projet) : plusieurs questions par concept, chacune avec son propre `slip`/`guess`. 47+ tests, cas d'or de la monographie (0,500→0,818) vérifié.
+Implémente les 4 couches KST : `build_knowledge_space` (chapitre 2), `Domain`/`Concept`/`Question` avec BLIM (chapitre 3), `bayes_update`/`entropy`/`information_gain_exact`/`pi_star` (anciennement `select_next`, renommé Lot 5)/`should_stop` (chapitres 6-7). Concept et Question sont **séparés** (refactor fait tôt dans le projet) : plusieurs questions par concept, chacune avec son propre `slip`/`guess`. 47+ tests, cas d'or de la monographie (0,500→0,818) vérifié.
 
 ### Piste A — pipeline complet sur données réelles (Junyi Academy, dataset Junyi15)
 1. **`data/extract_junyi.py`** — construit `data/domain.yaml` (concepts + prérequis) depuis `junyi_Exercise_table.csv`. Résout les conflits de direction de prérequis par test binomial bilatéral (α=0,10, appliqué uniformément).

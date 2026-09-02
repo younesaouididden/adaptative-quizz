@@ -1,6 +1,6 @@
 """Baseline CAT-IRT (3PL, critere d'information de Fisher) pour le benchmark A3.
 
-Sert de point de comparaison a la selection KST (kst_engine.select_next) :
+Sert de point de comparaison a la selection KST (kst_engine.pi_star) :
 theta continu unidimensionnel au lieu d'un etat de connaissance discret sur
 plusieurs concepts. Modele DELIBEREMENT mal specifie par rapport a la verite
 terrain BLIM -- c'est le point du benchmark (cf. docstring de benchmark_a3.py).

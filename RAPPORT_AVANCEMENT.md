@@ -20,7 +20,7 @@ Implémente les 4 couches de la théorie :
 - **Combinatoire** : `build_knowledge_space` construit `Z` (l'espace des états de connaissance valides) à partir d'un graphe de prérequis entre concepts — fermeture transitive puis sous-ensembles clos vers le bas.
 - **Probabilité (BLIM)** : `Domain`/`Concept`/`Question`, chaque question a son propre `slip` (erreur d'inattention) et `guess` (réponse au hasard), contrainte `slip+guess<1`. **Concept et Question sont volontairement séparés** (refactor fait tôt) : plusieurs questions par concept, ce qui donne un vrai choix à la sélection gloutonne.
 - **Mise à jour bayésienne** : `bayes_update` sur `Δ(Z)`, en log-espace, avec lissage symétrique (prior et vraisemblance) pour éviter que `p(z)` s'écrase à 0 de façon irréversible.
-- **Contrôle** : `select_next` (argmax du gain d'information exact), `should_stop` (trois critères : plafond de questions, confiance ≥ seuil, gain d'info résiduel négligeable).
+- **Contrôle** : `pi_star` — π*(p) = argmax_a IG(a;p), la politique optimale exacte (argmax du gain d'information) —, `should_stop` (trois critères : plafond de questions, confiance ≥ seuil, gain d'info résiduel négligeable).
 
 Le cas d'or de la monographie (0,500 → 0,818) est vérifié par test. Le moteur n'a **aucune dépendance hors numpy** — un choix de conception délibérément maintenu (les chargeurs YAML, matplotlib, etc. vivent dans des modules séparés).
 

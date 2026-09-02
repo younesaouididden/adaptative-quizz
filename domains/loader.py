@@ -18,7 +18,7 @@ def load_domain_yaml(path: str | Path) -> tuple[Domain, list[dict], dict[str, st
     """Charge un domaine + banque de questions depuis un YAML au format B1.
 
     Retourne (domain, meta, labels) :
-      - domain : objet moteur, pret pour bayes_update/select_next
+      - domain : objet moteur, pret pour bayes_update/pi_star
       - meta   : liste alignee sur domain.questions (stem/options/answer/difficulty)
       - labels : id de concept -> libelle humain
     """

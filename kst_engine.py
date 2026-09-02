@@ -7,6 +7,26 @@ Implemente les couches 1, 2 et 4 du PFA :
   4. Controle     : selection par maximisation du gain d'information
 
 Aucune dependance hors numpy.
+
+Correspondance theorie (monographie) <-> code (Lot 5, plan_action_code.md) --
+a tenir a jour si l'un des deux cote change :
+
+  Theorie                                          Code
+  ------------------------------------------------  -----------------------------
+  p_t in Delta(Z), etat de croyance                 p : np.ndarray (vecteur sur Z)
+  Transition bayesienne, eq. (1)                    bayes_update
+  pi*(p) = argmax_a IG(a;p), politique optimale      pi_star
+  IG(a;p) = E_y[D_KL(p^y_a || p)]                    information_gain_exact
+  epsilon-lissage                                    lissage symetrique en log-espace
+                                                      (bayes_update, EPS)
+  Action pedagogique a in A                          question de la banque (Question)
+  Probabilite d'emission P(y|a,z)                    modele BLIM (slip, guess)
+
+Les deux dernieres lignes ne sont PAS renommees dans le code : "action a" et
+"question" designent le meme objet, mais "question" reste plus lisible en
+Python qu'une lettre seule -- cf. Question/Concept, deja separes (voir
+docstrings des deux classes). Idem pour p_t : le parametre s'appelle deja `p`
+partout, ce qui correspond directement a la notation.
 """
 
 from __future__ import annotations
@@ -283,9 +303,15 @@ def questions_needed(slip: float, guess: float, n_concepts: int,
     return n_concepts * log_odds / item_information(slip, guess)
 
 
-def select_next(p: np.ndarray, domain: Domain,
-                asked: set[int]) -> tuple[int, float]:
-    """Politique gloutonne : argmax du gain d'information sur les questions non posees.
+def pi_star(p: np.ndarray, domain: Domain,
+           asked: set[int]) -> tuple[int, float]:
+    """Politique optimale exacte π*(p) = argmax_a IG(a;p) (chapitres 6-7) :
+    argmax du gain d'information sur les questions non posees.
+
+    C'est la politique que la theorie declare intractable en general et que
+    cette implementation calcule EXACTEMENT (pas une approximation) --
+    d'ou la valeur du Lot 1 du plan (validation de l'estimateur Monte Carlo
+    contre cette meme reference exacte, cf. plan_action_code.md).
 
     asked contient des indices de QUESTIONS (pas de concepts) : plusieurs
     questions du meme concept restent eligibles tant qu'elles n'ont pas
@@ -311,7 +337,7 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
     """Trois criteres d'arret (chapitre 7), le premier qui se declenche gagne.
 
     ig : gain d'information de la meilleure question restante, si deja
-    calcule par select_next (c'est le cas dans simulate). Sinon il est
+    calcule par pi_star (c'est le cas dans simulate). Sinon il est
     recalcule ici -- pratique pour appeler should_stop seul (tests), mais
     coute O(|A|.|Z|) : ne pas l'omettre dans une boucle chaude.
     """
@@ -320,7 +346,7 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
     if p.max() >= confidence:                       # un etat domine
         return True
     if ig is None:
-        _, ig = select_next(p, domain, asked)        # plus rien a apprendre
+        _, ig = pi_star(p, domain, asked)             # plus rien a apprendre
     return ig < min_ig
 
 
@@ -337,10 +363,10 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
     trace = [entropy(p)]
 
     while True:
-        # select_next calcule aussi le critere d'arret 3 (chapitre 7) : on le
+        # pi_star calcule aussi le critere d'arret 3 (chapitre 7) : on le
         # passe a should_stop plutot que le laisser le recalculer, ce qui
         # evite de payer deux fois O(|A|.|Z|) par question posee.
-        q_best, ig = select_next(p, domain, asked)
+        q_best, ig = pi_star(p, domain, asked)
         if should_stop(p, domain, asked, max_questions=max_questions, ig=ig):
             break
         q = q_best if adaptive else int(rng.choice(
