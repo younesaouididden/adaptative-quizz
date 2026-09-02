@@ -78,10 +78,19 @@ def select_next_irt(theta_hat: float, items: list[dict],
 
 def simulate_irt(domain: Domain, meta: list[dict], z_true: frozenset,
                  seed: int = 0, max_questions: int = 30,
-                 se_stop: float = 0.3) -> dict:
+                 se_stop: float = 0.3,
+                 verite_slip: float | None = None,
+                 verite_guess: float | None = None) -> dict:
     """Fait passer le quiz a un etudiant simule (verite terrain BLIM) selon
     la politique CAT-IRT : selection par info de Fisher, arret sur SE(theta),
-    diagnostic par concept via seuil = b moyen des items du concept."""
+    diagnostic par concept via seuil = b moyen des items du concept.
+
+    verite_slip / verite_guess (Lot 3.1, meme mecanisme que
+    kst_engine.simulate) : si fournis, la reponse est generee avec CES
+    parametres au lieu de question.slip/question.guess -- le modele 3PL de
+    l'algorithme (deja mal specifie par construction, cf. docstring du
+    module) reste inchange, seule la verite terrain varie.
+    """
     rng = np.random.default_rng(seed)
     items = build_irt_items(domain, meta)
     responses: list[tuple[float, float, float, bool]] = []
@@ -99,7 +108,9 @@ def simulate_irt(domain: Domain, meta: list[dict], z_true: frozenset,
         question = domain.questions[q]
         # l'etudiant repond selon le vrai BLIM, pas selon le 3PL (le 3PL est
         # le modele DE L'ALGORITHME, pas la verite terrain -- cf. docstring)
-        true_p = (1 - question.slip) if question.concept in z_true else question.guess
+        slip = question.slip if verite_slip is None else verite_slip
+        guess = question.guess if verite_guess is None else verite_guess
+        true_p = (1 - slip) if question.concept in z_true else guess
         correct = bool(rng.random() < true_p)
 
         it = items[q]

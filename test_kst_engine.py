@@ -656,6 +656,53 @@ class TestSimulate:
         r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=5)
         assert r["n_questions"] <= 5
 
+    def test_verite_none_reproduit_le_comportement_original(self, toy_domain):
+        """Lot 3.1 : parametres par defaut -> aucun changement de comportement."""
+        z_true = toy_domain.Z[-1]
+        r1 = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        r2 = simulate(toy_domain, z_true, adaptive=True, seed=0,
+                     verite_slip=None, verite_guess=None)
+        assert r1["n_questions"] == r2["n_questions"]
+        np.testing.assert_allclose(r1["belief"], r2["belief"])
+
+    def test_verite_extreme_biaise_le_diagnostic(self, toy_domain):
+        """Lot 3.1 : si la verite differe radicalement de ce que le moteur
+        suppose (guess quasi 1 : l'etudiant reussit presque toujours, meme
+        sans maitriser), le moteur -- qui continue de croire a son propre
+        guess bas -- doit etre trompe et diagnostiquer une maitrise que
+        l'etudiant n'a pas."""
+        z_true = frozenset()   # l'etudiant ne maitrise RIEN en verite
+        n_trompe = 0
+        for seed in range(20):
+            r = simulate(toy_domain, z_true, adaptive=True, seed=seed,
+                        verite_slip=0.10, verite_guess=0.95)
+            if r["z_hat"] != z_true:
+                n_trompe += 1
+        assert n_trompe > 10   # largement plus de la moitie, pas du bruit isole
+
+    def test_moteur_ignore_la_verite_pour_la_mise_a_jour(self, toy_domain):
+        """Le decouplage ne doit toucher QUE la generation de la reponse --
+        la mise a jour bayesienne doit rester exactement celle que produirait
+        domain.L (ce que le moteur croit), peu importe la verite fournie."""
+        z_true = toy_domain.Z[-1]
+        p0 = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        q_best, _ = pi_star(p0, toy_domain, set())
+        # meme graine, verite extreme : le premier tirage aleatoire sert a
+        # decider correct/incorrect selon la VERITE, mais la mise a jour
+        # doit utiliser domain.L (le moteur), verifiee via bayes_update direct
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0,
+                    verite_slip=0.10, verite_guess=0.95)
+        # le premier point du belief_trace est le prior, le second est le
+        # posterior apres 1 reponse -- il doit etre un posterior VALIDE du
+        # moteur (bayes_update avec correct=True ou correct=False), pas une
+        # valeur arbitraire
+        post_si_correct = bayes_update(p0, toy_domain, q_best, True)
+        post_si_incorrect = bayes_update(p0, toy_domain, q_best, False)
+        second = r["belief_trace"][1]
+        assert (np.allclose(second, post_si_correct) or
+               np.allclose(second, post_si_incorrect))
+
     def test_belief_trace_meme_longueur_que_entropy_trace(self, toy_domain):
         z_true = toy_domain.Z[-1]
         r = simulate(toy_domain, z_true, adaptive=True, seed=0)

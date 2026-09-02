@@ -117,6 +117,37 @@ Les chapitres 4-5 du rapport portent sur Fisher-Rao, les géodésiques, le gradi
 
 Table brute et figures : `results/lot2_2_arc_length/`, `results/lot2_3_sphere/`, `results/lot2_4_fisher_info/`. 12 nouveaux tests (`TestFisherRaoDistance`, `TestCumulativeArcLength`, `TestExpectedFisherRaoStep`, + 3 sur `belief_trace`), 157 tests passent au total.
 
+### Lot 3 — robustesse à la mauvaise spécification (branche `lot5-vocabulaire-theorie`, fait)
+
+Aujourd'hui un seul jeu de paramètres génère les réponses **et** est supposé par le moteur — l'objection la plus facile à formuler pour un jury. Les 6 points du plan sont traités.
+
+**3.1 — Découplage.** `simulate()` (`kst_engine.py`) et `simulate_irt()` (`irt_baseline.py`) gagnent chacun deux paramètres optionnels `verite_slip`/`verite_guess` : si fournis, la réponse simulée est générée avec **ces** valeurs, alors que la mise à jour bayésienne continue d'utiliser `domain.L` (ce que le moteur croit, figé à la construction du `Domain`). `None` (défaut) = comportement inchangé. Exactement le changement de signature minimal demandé par le plan — pas une réécriture. 4 tests.
+
+**3.2 — Grille de bruit** (`lot3_2_grille_mauvaise_specification.py`) : moteur figé à piste B (`slip=0,10`/`guess=0,25`), vérité balayée sur `slip∈{0,05·0,10·0,20·0,30}×guess∈{0,25·0,40·0,55·0,70}` (16 cellules), 3 politiques (KST adaptatif, aléatoire, CAT-IRT), 50 états × 20 répétitions = 48 000 lignes. Exactitude par concept (KST adaptatif) :
+
+| slip\guess | 0,25 | 0,40 | 0,55 | 0,70 |
+|---|---|---|---|---|
+| 0,05 | 98,1 % | 94,0 % | 85,6 % | 71,5 % |
+| **0,10** | **95,8 %** | 91,8 % | 83,0 % | 70,7 % |
+| 0,20 | 88,6 % | 85,5 % | 77,2 % | 63,9 % |
+| 0,30 | 78,6 % | 75,1 % | 67,6 % | 55,9 % |
+
+(cellule en gras = bien spécifiée, correspond au 95,7 % déjà mesuré par le benchmark A3 — cohérence croisée confirmée). Dégradation nette et attendue quand `guess` réel dépasse ce que le moteur croit.
+
+**3.3 — Graphe de prérequis faux** (`lot3_3_prereq_faux.py`) : 400 étudiants simulés, 15 % (60) avec un état vrai **hors** `Z` (viole la structure de prérequis, ex. `algebra_advanced` maîtrisé sans `algebra_linear` — 78 états invalides possibles sur 128 sous-ensembles). `correct_diagnosis` est faux par construction pour ce groupe (le moteur ne peut représenter l'état) — la distance de Hamming est la bonne métrique : **0,315** concept mal diagnostiqué en moyenne pour les états valides, **1,467** pour les états invalides (~4,7× pire, mais dégradation **gracieuse**, pas un effondrement — le moteur reste majoritairement correct, 5,5/7 concepts en moyenne, même sur un état qu'il ne peut structurellement pas représenter).
+
+**3.4 — Arène miroir** (`lot3_4_arene_miroir.py`) : vérité générée par le 3PL continu (le modèle DE l'IRT) au lieu du BLIM, 200 étudiants (`θ~N(0,1)`). Résultat voulu et confirmé : **l'IRT gagne sur sa propre vérité** (85,0 % vs 73,1 % d'exactitude par concept pour KST) — l'exact miroir du benchmark A3 (vérité BLIM : KST 95,7 % vs IRT 66,3 %). Le message n'est pas « KST bat IRT » ni l'inverse : **chaque modèle domine sur sa propre vérité générative**, et la vraie question — laquelle décrit les données Junyi — renvoie à la piste A, désamorçant l'objection de l'arène truquée.
+
+**3.5 — Calibration de la confiance.** Diagramme de fiabilité (confiance annoncée à l'arrêt vs proportion réelle d'états exactement corrects), politique KST adaptative, sur les mêmes runs que 3.2 : à la cellule bien spécifiée, la courbe suit la diagonale (erreur de calibration `ECE=0,018`). Au régime piste A (`guess=0,70`), la confiance annoncée atteint ~90 % alors que l'exactitude réelle plafonne à ~10-38 % (`ECE=0,467`) — **« 90 % sûr » ne veut plus dire « 9 fois sur 10 »**, mesuré et chiffré, pas seulement affirmé.
+
+**3.6 — Correction** (`lot3_6_correction.py`) : même grille rejouée avec un moteur volontairement prudent (`slip=0,20`/`guess=0,40` supposés). **Résultat plus nuancé que ne le laissait supposer le plan** — ce n'est pas une simple restauration :
+- Régime piste A : `ECE` passe de 0,467 à **0,271** (amélioration réelle, ~42 %), au prix de plus de questions (23,5→27,7).
+- Cellule bien spécifiée : `ECE` passe de 0,018 à **0,195** (nettement **dégradée** — le moteur devient sous-confiant là où il n'avait pas besoin de l'être), et coûte aussi plus cher (19,3→27,3 questions).
+
+**La prudence n'est pas un correctif gratuit : c'est un compromis robustesse/précision explicite**, qui améliore le pire cas au prix du cas normal — un résultat plus intéressant et plus honnête pour le rapport qu'un simple « ça marche », cohérent avec l'esprit `note_calibration.md` (jamais forcer un résultat à correspondre à l'attente).
+
+Résultats bruts et figures : `results/lot3_2_grille/`, `results/lot3_3_prereq_faux/`, `results/lot3_4_arene_miroir/`, `results/lot3_6_correction/`. 161 tests passent au total (4 nouveaux pour 3.1).
+
 ---
 
 ## 3. Artifacts annexes (hors pipeline de production, mais dans le repo)

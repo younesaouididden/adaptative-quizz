@@ -528,8 +528,21 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
 # ---------------------------------------------------------------------------
 
 def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
-             seed: int = 0, max_questions: int = 30):
-    """Fait passer le quiz a un etudiant simule dont on connait l'etat reel."""
+             seed: int = 0, max_questions: int = 30,
+             verite_slip: float | None = None,
+             verite_guess: float | None = None):
+    """Fait passer le quiz a un etudiant simule dont on connait l'etat reel.
+
+    verite_slip / verite_guess (Lot 3.1, plan_action_code.md -- decouplage
+    verite/moteur) : si fournis, la reponse de l'etudiant est generee avec
+    CES parametres au lieu de question.slip/question.guess, alors que la
+    mise a jour bayesienne continue d'utiliser domain.L (ce que le moteur
+    CROIT, fige a la construction du Domain). None (defaut) : comportement
+    inchange d'avant ce lot, verite et moteur coincident.
+
+    C'est le seul changement de signature demande par le Lot 3 -- pas une
+    reecriture du simulateur, cf. plan_action_code.md 3.1.
+    """
     rng = np.random.default_rng(seed)
     p = uniform_prior(domain)
     asked: set[int] = set()
@@ -546,10 +559,13 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
         q = q_best if adaptive else int(rng.choice(
             [i for i in range(domain.n_questions) if i not in asked]))
         question = domain.questions[q]
-        # l'etudiant repond selon le vrai BLIM
-        true_p = (1 - question.slip) if question.concept in z_true else question.guess
+        # l'etudiant repond selon la VERITE (peut differer de ce que le
+        # moteur croit -- domain.L, utilise par bayes_update ci-dessous)
+        slip = question.slip if verite_slip is None else verite_slip
+        guess = question.guess if verite_guess is None else verite_guess
+        true_p = (1 - slip) if question.concept in z_true else guess
         correct = bool(rng.random() < true_p)
-        p = bayes_update(p, domain, q, correct)
+        p = bayes_update(p, domain, q, correct)   # <- toujours domain.L (le moteur)
         asked.add(q)
         trace.append(entropy(p))
         belief_trace.append(p.copy())

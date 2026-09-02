@@ -164,7 +164,59 @@ Les chapitres 4-5 du rapport portent sur la géométrie de Fisher-Rao, les géod
 
 ---
 
-## 7. Ce qui reste ouvert / non résolu
+## 7. Lot 3 — Robustesse à la mauvaise spécification (fait)
+
+Aujourd'hui un seul jeu de paramètres génère les réponses **et** est supposé par le moteur — l'objection la plus facile à formuler pour un jury. Six points traités.
+
+**3.1 (découplage)** : `simulate()` et `simulate_irt()` acceptent désormais `verite_slip`/`verite_guess` optionnels — la réponse simulée peut différer de ce que le moteur croit (`domain.L`, utilisé pour la mise à jour bayésienne). Changement de signature minimal, pas une réécriture.
+
+**3.2 — grille de bruit** : moteur figé à piste B, vérité balayée sur 16 cellules (`slip×guess`), 3 politiques, 48 000 runs.
+
+<p align="center">
+  <img src="lot3_2_degradation_figure.png" alt="Lot 3.2 : degradation sous mauvaise specification" width="800">
+</p>
+
+*Figure 10 — exactitude par concept selon `(slip, guess)` réels, moteur figé à piste B (cadre noir = cellule bien spécifiée). Dégradation nette et asymétrique quand `guess` réel dépasse ce que le moteur croit.*
+
+**3.3 — graphe de prérequis faux** : 15 % des étudiants simulés ont un état vrai hors `Z` (structurellement irreprésentable). Distance de Hamming : 0,315 concept mal diagnostiqué en moyenne pour les états valides, 1,467 pour les invalides — dégradation nette mais **gracieuse**, pas un effondrement.
+
+<p align="center">
+  <img src="lot3_3_prereq_faux_figure.png" alt="Lot 3.3 : distance de Hamming" width="800">
+</p>
+
+*Figure 11 — distribution de la distance de Hamming et coût en questions, états valides vs hors Z.*
+
+**3.4 — arène miroir** : vérité générée par le 3PL continu (le modèle DE l'IRT) au lieu du BLIM.
+
+<p align="center">
+  <img src="lot3_4_arene_miroir_figure.png" alt="Lot 3.4 : arene miroir" width="800">
+</p>
+
+*Figure 12 — sur sa propre vérité générative, l'IRT gagne (85,0 % vs 73,1 %) — l'exact miroir du benchmark A3 (vérité BLIM : KST 95,7 % vs IRT 66,3 %). Chaque modèle domine sur sa propre vérité ; la vraie question — laquelle décrit Junyi — renvoie à la piste A.*
+
+**3.5 — calibration de la confiance** :
+
+<p align="center">
+  <img src="lot3_5_calibration_figure.png" alt="Lot 3.5 : diagramme de fiabilite" width="600">
+</p>
+
+*Figure 13 — diagramme de fiabilité, politique KST adaptative. Bien spécifié : suit la diagonale (ECE=0,018). Régime piste A (`guess=0,70`) : confiance ~90 % pour une exactitude réelle de ~10-38 % (ECE=0,467) — mesuré, pas seulement affirmé.*
+
+**3.6 — correction, résultat plus nuancé que prévu** : même grille avec un moteur volontairement prudent (`slip=0,20`/`guess=0,40` supposés).
+
+<p align="center">
+  <img src="lot3_6_calibration_figure.png" alt="Lot 3.6 : calibration apres correction" width="600">
+</p>
+
+*Figure 14 — après correction : régime piste A améliore son ECE (0,467→0,271, ~42 %) au prix de plus de questions (23,5→27,7). Mais la cellule bien spécifiée se DÉGRADE (ECE 0,018→0,195) — le moteur devient sous-confiant là où il n'en avait pas besoin.*
+
+**La prudence n'est pas un correctif gratuit : c'est un compromis robustesse/précision explicite**, qui améliore le pire cas au prix du cas normal. Résultat plus honnête et plus intéressant pour le rapport qu'un simple « ça marche » — cohérent avec l'esprit de `note_calibration.md` (jamais forcer un résultat à correspondre à l'attente).
+
+161 tests passent (4 nouveaux pour 3.1). Résultats bruts : `results/lot3_2_grille/`, `results/lot3_3_prereq_faux/`, `results/lot3_4_arene_miroir/`, `results/lot3_6_correction/`.
+
+---
+
+## 8. Ce qui reste ouvert / non résolu
 
 - **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
 - **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
@@ -174,6 +226,6 @@ Les chapitres 4-5 du rapport portent sur la géométrie de Fisher-Rao, les géod
 
 ---
 
-## 8. Style de travail établi sur ce projet
+## 9. Style de travail établi sur ce projet
 
 Petits incréments testables, un test pytest par fonction sur fixtures synthétiques (jamais les fichiers réels multi-millions de lignes), fonctions mathématiques commentées avec le numéro de chapitre de la monographie correspondant, commit+push après chaque étape significative avec messages détaillés, documents de passation écrits à chaque décision importante.

@@ -125,3 +125,21 @@ def test_simulate_irt_stops_at_max_questions():
     meta = _tiny_meta()
     r = simulate_irt(domain, meta, frozenset({"x"}), seed=0, max_questions=2)
     assert r["n_questions"] <= 2
+
+
+def test_simulate_irt_verite_decouplee_du_modele_3pl():
+    """Lot 3.1 : verite_slip/verite_guess controlent la generation de la
+    reponse, independamment du modele 3PL de l'algorithme (deja construit
+    a partir de la banque BLIM par build_irt_items -- inchange)."""
+    domain = _tiny_domain()
+    meta = _tiny_meta()
+    z_true = frozenset()  # l'etudiant ne maitrise rien en verite
+
+    n_correct_diagnosis = sum(
+        simulate_irt(domain, meta, z_true, seed=s,
+                    verite_slip=0.10, verite_guess=0.95)["correct_diagnosis"]
+        for s in range(20)
+    )
+    # avec un tel guess de verite, l'etudiant reussit presque tout ->
+    # l'IRT doit rarement diagnostiquer correctement l'absence de maitrise
+    assert n_correct_diagnosis < 10
