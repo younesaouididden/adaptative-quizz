@@ -54,6 +54,23 @@ Réutilise **directement** `kst_engine.py` (pas de réimplémentation), mais cha
 - **Bug corrigé précédemment** : `pick_next()` ne faisait jamais passer `stage` à `"quiz"` — l'écran d'intro semblait bloqué au clic. Corrigé (commit `7558349`), vérifié par interaction réelle en local.
 - **Accès collègue** : le repo GitHub est privé → l'app Streamlit est privée par défaut. Pour donner accès : Share (en haut à droite de l'app) → ajouter l'e-mail du collègue comme viewer. Alternative : ajouter comme collaborateur GitHub. Rendre le repo public est une option mais expose le code source — pas fait par défaut, à la décision de l'utilisateur.
 
+### Benchmark A3 (`benchmark_a3.py`, `irt_baseline.py`) — fait, sur piste B
+Compare trois politiques de sélection sur la banque `domains/piste_b.yaml` (35 questions, 7 concepts, |Z|=50), en rejouant **tous** les états de `domain.Z` avec des étudiants simulés (verité terrain BLIM identique pour les trois — seul l'algorithme diffère, même logique que l'argument "items identiques, deux algorithmes" de l'addendum) :
+
+| Politique | Questions (moy.) | Exactitude état exact | Exactitude par concept |
+|---|---|---|---|
+| Adaptatif (gain d'info, KST) | 18.6 | 80 % | 95.7 % |
+| Aléatoire | 27.7 | 82 % | 96.6 % |
+| CAT-IRT (baseline 3PL) | 30.0 (plafond atteint) | 4 % | 66.3 % |
+
+Table brute : `benchmark_a3_table.csv`. Figure prête pour le mémoire : `benchmark_a3.png`.
+
+- **`irt_baseline.py`** : baseline CAT-IRT (3PL, sélection par information de Fisher, estimation de θ par EAP sur grille — pas MLE, qui diverge tant que les réponses sont uniformément justes/fausses, fréquent en début de CAT). Paramètres d'item **déduits** de la banque BLIM existante, pas calibrés indépendamment : `c = question.guess`, `b` depuis la difficulté déclarative YAML (1/2/3 → −1/0/+1), `a = 1.0` fixe pour tous les items. Diagnostic par concept lu via un seuil = `b` moyen des items du concept (mastery testing standard). **Limites assumées, à citer dans le rapport.**
+- **Le CAT-IRT est délibérément mal spécifié** par rapport à la vérité terrain BLIM (θ continu unidimensionnel plaqué sur un état de connaissance discret multi-concept) — c'est exactement ce que le benchmark doit montrer : l'écart de performance d'un vrai CAT-IRT appliqué à des données qui suivent en réalité une KST, pas une comparaison entre deux modèles également vrais.
+- **Lecture des résultats** : l'adaptatif réduit le nombre de questions de ~33 % par rapport à l'aléatoire (18.6 vs 27.7) pour une exactitude quasi identique (95.7 % vs 96.6 % — écart non significatif vu la taille de l'échantillon, 50 états). Le CAT-IRT n'atteint jamais son critère d'arrêt (SE(θ)≤0.3) en 30 questions et plafonne — sa précision par concept (66.3 %) reste nettement au-dessus du hasard (50 %, un θ unidimensionnel capture un signal d'aptitude globale) mais très en dessous des deux politiques KST, cohérent avec l'incapacité structurelle d'un θ unique à résoudre un état de maîtrise multi-concept partiel.
+- Comme piste B n'est pas calibrée empiriquement, ce benchmark mesure le **gain algorithmique** des politiques de sélection sur une banque donnée, pas une validation empirique des paramètres — à formuler ainsi dans le rapport, distinct de la piste A (calibration réelle sur Junyi Academy).
+- 10 tests dans `test_irt_baseline.py`, dont un test de récupération de paramètre (θ connu, EAP le retrouve en moyenne sur plusieurs étudiants simulés — même logique que le test EM de piste A) et un test sur la formule d'information de Fisher.
+
 ---
 
 ## 3. Artifacts annexes (hors pipeline de production, mais dans le repo)
@@ -103,6 +120,6 @@ Réutilise **directement** `kst_engine.py` (pas de réimplémentation), mais cha
 - **Décision actée** : le rendu est un **rapport scientifique** (stage recherche), Streamlit suffit pour la démo/soutenance → **Sprint 1 (API FastAPI) explicitement écarté pour l'instant**, pas de valeur sans frontend Next.js prévu.
 - **Piste B reprise et étendue** (5 → 7 concepts, commit `d7b74a6`) : `domains/piste_b.yaml` + `domains/loader.py` + `domains/validate.py` + `domains/test_loader.py`, 35 questions, `app.py` bascule dessus. 108 tests passent, app vérifiée en navigateur (intro → quiz → résultats, diagnostic correct sur les 7 concepts). Poussé sur GitHub.
 - **Piste A intacte**, non touchée par ce travail — `data/domain.yaml` (5 concepts calibrés EM) reste le domaine de référence pour la calibration/le futur benchmark A3.
-- **Prochaine étape actée mais pas commencée** : le benchmark (adaptatif / aléatoire / IRT) reste envisagé après la piste B — `kst_engine.simulate()` existe déjà et fonctionne sur n'importe quel domaine (testé manuellement sur `domains/piste_b.yaml` : 11 à 30 questions selon l'état simulé, moyenne ≈18,6). Ce qui manque : la baseline CAT-IRT (3PL, critère de Fisher), à ajouter pour un vrai A3. Cadrage discuté : sur piste B ça mesure le **gain algorithmique** (comparaison de politiques de sélection), pas une validation empirique — à formuler clairement ainsi dans le rapport, distinct de la calibration réelle de piste A.
-- Question restée ouverte (non résolue, action à l'utilisateur) : accès du collègue à l'app déployée sur Streamlit Community Cloud — **à redéployer** après ce changement de domaine (Share → ajouter son e-mail, ou collaborateur GitHub).
-- **Pas de prochaine tâche explicitement actée au-delà de ça** — demander à l'utilisateur s'il veut enchaîner sur le benchmark CAT-IRT maintenant, ou autre chose, plutôt que de supposer.
+- **Benchmark A3 fait** (`benchmark_a3.py` + `irt_baseline.py`, voir §2) : adaptatif vs aléatoire vs CAT-IRT (baseline 3PL) sur `domains/piste_b.yaml`, exhaustif sur les 50 états de `Z`. Résultat net : adaptatif réduit ~33 % des questions vs aléatoire à précision quasi égale (95.7 % vs 96.6 %) ; le CAT-IRT plafonne à 30 questions et reste nettement moins précis (66.3 %). Table (`benchmark_a3_table.csv`) et figure (`benchmark_a3.png`) prêtes pour le mémoire. 118 tests passent (108 + 10 nouveaux sur `irt_baseline.py`). Poussé sur GitHub.
+- Question restée ouverte (non résolue, action à l'utilisateur) : accès du collègue à l'app déployée sur Streamlit Community Cloud — **à redéployer** après le changement de domaine piste B (Share → ajouter son e-mail, ou collaborateur GitHub).
+- **Pas de prochaine tâche explicitement actée au-delà de ça** — demander à l'utilisateur ce qu'il veut faire ensuite (intégrer les résultats A3 dans une rédaction de rapport ? refaire tourner le benchmark sur le domaine calibré piste A pour comparer ? présentation/soutenance ?) plutôt que de supposer.
