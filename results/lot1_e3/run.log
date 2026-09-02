@@ -1,0 +1,11 @@
+date (UTC)   : 2026-09-02T18:52:03.929069+00:00
+commande     : python lot1_e3_cout_calcul.py
+commit git   : d82a9f6
+n_concepts   : [5, 7, 9, 11, 13] -> |Z| = [32, 128, 512, 2048, 8192]
+mesure       : timeit.autorange (>=0.2s par point, rng=default_rng(0) fixe pour les appels MC)
+
+Recommandation d'ingenierie (livrable Lot 1, plan_action_code.md) :
+  - sample_y, N= 10 : cout ~3.309ms, mais CROIT avec |Z| comme l'exact (meme ordre O(|Z|), cf. kst_engine docstring) -- jamais avantageux, confirme le preambule du Lot 1
+  - sample_y, N=100 : cout ~4.173ms, mais CROIT avec |Z| comme l'exact (meme ordre O(|Z|), cf. kst_engine docstring) -- jamais avantageux, confirme le preambule du Lot 1
+  - sample_z, N= 10 : cout ~0.936ms (±0.952), independant de |Z| -- croise l'exact vers |Z| ~= 1,379
+  - sample_z, N=100 : cout ~0.989ms (±0.770), independant de |Z| -- croise l'exact vers |Z| ~= 1,486

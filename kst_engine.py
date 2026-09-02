@@ -271,6 +271,21 @@ def information_gain_mc(p: np.ndarray, domain: Domain, q: int,
     (fonction non-lineaire de la moyenne empirique) qui s'attenue avec N :
     exactement le compromis biais-variance-temps que E1 doit chiffrer.
 
+    PIEGE decouvert en E2 (pas en E1) : a n_samples=1, l'estimateur est
+    DEGENERE, pas juste bruite. p_correct_hat (un seul point) est alors
+    IDENTIQUE a l'unique element de p_correct_i utilise pour le terme
+    conditionnel -- H(Y|a) et E_z[H(Y|a,z)] sont donc calcules sur exactement
+    la meme donnee, et leur difference vaut 0.0 EXACTEMENT, pour toute
+    question, a chaque appel (pas juste en esperance). pi_hat(mode="sample_z",
+    n_samples=1) retombe alors systematiquement sur le premier candidat
+    balaye (argmax sur des ex-aequo a 0), et should_stop s'arrete
+    immediatement (ig=0 < min_ig) -- simulate_mc(n_samples=1, mode="sample_z")
+    ne pose donc JAMAIS aucune question. E1 (qui mesure une decision isolee
+    au milieu d'une trajectoire deja avancee) ne revele pas cette pathologie
+    aussi clairement que E2 (qui rejoue la boucle complete depuis le prior) --
+    exactement pourquoi les deux experiences sont necessaires. N=1 est a
+    proscrire avec ce mode ; N>=3 suffit a le rendre non-degenere.
+
     Piege commun aux deux modes (chapitre 4-5) : lisser SEULEMENT le
     denominateur du KL, log(P / (Q+eps)), biaise l'estimateur et peut le
     rendre negatif. On lisse donc les deux distributions avec la meme
@@ -471,6 +486,45 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
         correct = bool(rng.random() < true_p)
         p = bayes_update(p, domain, q, correct)
         asked.add(q)
+        trace.append(entropy(p))
+
+    z_hat = domain.Z[int(np.argmax(p))]
+    return {"n_questions": len(asked), "entropy_trace": trace,
+            "z_hat": z_hat, "correct_diagnosis": z_hat == z_true,
+            "confidence": float(p.max()), "belief": p}
+
+
+def simulate_mc(domain: Domain, z_true: frozenset, n_samples: int,
+                mode: str = "sample_z", seed: int = 0,
+                max_questions: int = 30) -> dict:
+    """Variante de simulate() pilotee par la politique APPROXIMEE pi_hat
+    (Lot 1, plan_action_code.md, experience E2) au lieu de pi_star -- meme
+    structure, meme sortie, seule la ligne de selection change.
+
+    Selection ET critere d'arret (3e critere de should_stop, gain d'info
+    residuel) utilisent tous deux l'estimation MC, pas l'exact : c'est
+    l'usage realiste de l'approximation en production (on ne paierait pas
+    le cout de pi_star juste pour le critere d'arret si le but est
+    justement d'eviter ce cout).
+
+    Mesure le cout en aval de l'approximation : comparer n_questions et
+    correct_diagnosis a simulate(domain, z_true, adaptive=True, seed=seed)
+    (= pi_star, N infini) pour le meme z_true et la meme graine.
+    """
+    rng = np.random.default_rng(seed)
+    p = uniform_prior(domain)
+    asked: set[int] = set()
+    trace = [entropy(p)]
+
+    while True:
+        q_best, ig = pi_hat(p, domain, asked, n_samples=n_samples, mode=mode, rng=rng)
+        if should_stop(p, domain, asked, max_questions=max_questions, ig=ig):
+            break
+        question = domain.questions[q_best]
+        true_p = (1 - question.slip) if question.concept in z_true else question.guess
+        correct = bool(rng.random() < true_p)
+        p = bayes_update(p, domain, q_best, correct)
+        asked.add(q_best)
         trace.append(entropy(p))
 
     z_hat = domain.Z[int(np.argmax(p))]

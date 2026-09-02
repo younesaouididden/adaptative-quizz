@@ -112,7 +112,27 @@ La présentation d'août posait l'estimateur Monte Carlo comme un compromis biai
 
 **Résultat à retenir** : le taux d'accord est trompeur — même à N=100, π̂_N ne retombe sur l'argmax exact que ~30 % du temps, mais la question choisie reste à 97-99 % du gain d'information optimal. Le **regret** est la métrique honnête, exactement comme l'annonçait le plan. `sample_z` a besoin d'environ 3 à 5× plus d'échantillons que `sample_y` pour un regret équivalent — attendu, puisque `sample_y` profite gratuitement du calcul exact de `p_correct` (déjà payé), alors que `sample_z` ne touche jamais `Z` en entier. Sur `|Z|=50` (piste B), calculer l'exact reste le meilleur choix des deux côtés — `sample_z` ne devient intéressant qu'au-delà d'un seuil de `|Z|` pas encore mesuré (rôle d'E3, à venir).
 
-**Reste du Lot 1** : E2 (coût en aval — rejouer le benchmark complet avec π̂_N), E3 (temps de calcul exact vs MC en fonction de `|Z|`, sur domaines synthétiques), 1.5 (figure `|Z|` vs nombre de concepts).
+**E2 (coût en aval)** — rejoue le benchmark complet avec π̂_N au lieu de π* :
+
+<p align="center">
+  <img src="lot1_e2_figure.png" alt="Lot 1 E2 : cout en aval" width="700">
+</p>
+
+*Figure 5 — nombre de questions et exactitude finale, π̂_N vs π* (ligne pointillée), sur le benchmark complet (50 états × 5 réplications).*
+
+Résultat rassurant : dès N=3, les deux modes retombent quasi sur l'exact (~19-20 questions vs 18,6 ; ~96 % d'exactitude vs 95,7 %) — le faible taux d'accord mesuré par E1 ne se traduit **pas** en coût élevé sur la trajectoire complète. **Sauf un piège net et net à N=1 pour `sample_z`** (visible sur la figure, chute à 0 question / 47 % d'exactitude) : à N=1, l'estimateur est **dégénéré**, pas juste bruité — `H(Y|a)` et `E_z[H(Y|a,z)]` sont calculés sur exactement le même point, leur différence vaut 0.0 exactement, ce qui fait arrêter le quiz avant la moindre question. E1 ne le révélait pas (il regarde des décisions isolées à mi-trajectoire) ; E2 le révèle (il rejoue depuis le prior uniforme) — la raison d'être des deux expériences.
+
+**E3 (coût de calcul selon `|Z|`)** — domaines synthétiques sans prérequis (`|Z|` de 32 à 8192), temps d'une décision complète :
+
+<p align="center">
+  <img src="lot1_e3_figure.png" alt="Lot 1 E3 : cout de calcul selon |Z|" width="600">
+</p>
+
+*Figure 6 — temps par décision (échelle log-log), exact vs Monte Carlo. `sample_y` suit l'exact (même ordre `O(|Z|)`) ; `sample_z` reste quasi constant.*
+
+**Recommandation d'ingénierie chiffrée (livrable du Lot 1)** : le croisement des courbes mesurées place le seuil autour de `|Z| ≈ 1 400`. **Sous ce seuil, calculer l'exact ; au-delà, `sample_z` avec `N ≈ 10-30`** (E1 : regret déjà < 15 % à N=30). Piste A (`|Z|=18`) et piste B (`|Z|=50`) sont très en dessous — l'approximation MC n'a d'intérêt que pour des domaines nettement plus riches que ceux utilisés dans ce PFA. Seuil mesuré sur une machine donnée, ordre de grandeur plutôt que constante universelle.
+
+**Reste du Lot 1** : 1.5 (figure `|Z|` vs nombre de concepts pour les domaines réels + synthétiques — cosmétique, E3 couvre déjà l'essentiel).
 
 ---
 

@@ -30,6 +30,7 @@ from kst_engine import (
     pi_hat,
     should_stop,
     simulate,
+    simulate_mc,
     make_demo_domain,
     _question_bank,
     _OFFSET_POOL,
@@ -306,6 +307,30 @@ class TestInformationGainMcSampleZ:
                                      mode="sample_z", rng=rng)
             assert mc == pytest.approx(exact, abs=0.02)
 
+    def test_degenere_a_n1_vaut_exactement_zero(self, toy_domain):
+        """Piege decouvert en E2 (lot1_e2_cout_en_aval.py), pas en E1 : a
+        n_samples=1, H(Y|a) et E_z[H(Y|a,z)] sont calcules sur exactement le
+        meme point -- leur difference vaut 0.0 EXACTEMENT (pas juste bruite
+        autour de 0), pour n'importe quelle question ou croyance. Consequence
+        en aval : simulate_mc(n_samples=1, mode="sample_z") ne pose jamais
+        aucune question (should_stop s'arrete des le premier tour, ig=0)."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        for q in range(toy_domain.n_questions):
+            mc = information_gain_mc(p, toy_domain, q, n_samples=1,
+                                     mode="sample_z", rng=rng)
+            assert mc == 0.0
+
+    def test_non_degenere_des_n3(self, toy_domain):
+        """N>=3 suffit a rompre la degenerescence de N=1 (au moins un des
+        n_samples tirages differe generiquement des autres)."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        values = [information_gain_mc(p, toy_domain, 0, n_samples=3,
+                                      mode="sample_z", rng=rng)
+                 for _ in range(20)]
+        assert any(v != 0.0 for v in values)
+
     def test_question_sur_etat_certain_najoute_rien(self, toy_domain):
         p = np.zeros(toy_domain.n_states)
         p[0] = 1.0
@@ -563,6 +588,46 @@ class TestSimulate:
         with patch("kst_engine.pi_star", wraps=kst_engine.pi_star) as spy:
             r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=100)
         assert spy.call_count == r["n_questions"] + 1
+
+
+class TestSimulateMc:
+    """simulate() pilote par pi_hat au lieu de pi_star (Lot 1, E2)."""
+
+    def test_sample_z_n1_ne_pose_aucune_question(self, toy_domain):
+        """Consequence en aval de la degenerescence documentee dans
+        information_gain_mc (piege E2) : ig=0 exactement des le premier
+        tour -> should_stop s'arrete avant la moindre question."""
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=1, mode="sample_z", seed=0)
+        assert r["n_questions"] == 0
+
+    def test_diagnostic_dans_Z(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_z", seed=0)
+        assert r["z_hat"] in toy_domain.Z
+
+    def test_ne_depasse_pas_le_budget(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_z",
+                        seed=0, max_questions=5)
+        assert r["n_questions"] <= 5
+
+    def test_meme_forme_de_sortie_que_simulate(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_y", seed=0)
+        assert set(r.keys()) == {"n_questions", "entropy_trace", "z_hat",
+                                 "correct_diagnosis", "confidence", "belief"}
+
+    def test_grand_n_se_rapproche_de_pi_star_en_moyenne(self):
+        """Pas une egalite exacte (rng consommee differemment), mais a grand
+        N sur plusieurs etats, le nombre moyen de questions doit rester du
+        meme ordre de grandeur que la politique exacte."""
+        dom = make_demo_domain(questions_per_concept=3)
+        n_exact = [simulate(dom, z, adaptive=True, seed=s)["n_questions"]
+                  for s, z in enumerate(dom.Z)]
+        n_mc = [simulate_mc(dom, z, n_samples=500, mode="sample_z", seed=s)["n_questions"]
+               for s, z in enumerate(dom.Z)]
+        assert np.mean(n_mc) == pytest.approx(np.mean(n_exact), rel=0.5)
 
     def test_diagnostic_exact_depasse_85_pourcent(self):
         """Critere d'acceptation du Sprint 0 (PROMPT_DEMARRAGE section 5)."""
