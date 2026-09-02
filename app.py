@@ -4,11 +4,14 @@ domains/piste_b.yaml (7 concepts, 35 questions ecrites a la main) -- aucune
 reimplementation, le moteur qui tourne ici est exactement celui teste dans
 test_kst_engine.py.
 
-Domaine piste B (cf. ADDENDUM_BANQUE_QUESTIONS.md, domains/piste_b.yaml) :
-slip/guess sont des valeurs EXPERTES non calibrees (guess = 1/nb_options,
-slip = 0.10), pas le resultat d'une calibration EM sur des donnees reelles.
-La calibration reelle (piste A, data/domain.yaml) est un pipeline separe,
-sur un domaine a 5 concepts issu des logs Junyi Academy.
+Domaine piste B (cf. ADDENDUM_BANQUE_QUESTIONS.md, domains/piste_b.yaml,
+note_calibration.md) : guess = 1/nb_options est une borne combinatoire
+conservatrice (guess <= 1/k pour un QCM a k options), pas une valeur choisie ;
+slip = 0.10 n'a pas de justification de premier principe, c'est un point sur
+un axe a balayer, pas une "valeur experte" figee. Ni l'un ni l'autre n'est le
+resultat d'une calibration EM sur des donnees reelles -- celle-ci (piste A,
+data/domain.yaml) est un pipeline separe, sur un domaine a 5 concepts issu
+des logs Junyi Academy.
 """
 
 from pathlib import Path
@@ -151,8 +154,9 @@ elif st.session_state.stage == "results":
 
     st.caption(
         "Sélection par gain d'information sur Δ(Z), mise à jour bayésienne (BLIM). "
-        "Domaine piste B : slip/guess sont des valeurs expertes non calibrées "
-        "(guess = 1/nb d'options, slip = 0,10), pas une calibration empirique."
+        "Domaine piste B : guess = 1/nb d'options est une borne combinatoire "
+        "conservatrice, slip = 0,10 un point sur un axe balayé — ni l'un ni "
+        "l'autre n'est une calibration empirique."
     )
     if st.button("Recommencer"):
         init_state(domain)

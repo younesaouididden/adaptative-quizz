@@ -233,6 +233,56 @@ def information_gain_mc(p: np.ndarray, domain: Domain, q: int,
     return total / n_samples
 
 
+def item_information(slip: float, guess: float) -> float:
+    """Information moyenne (en nats) qu'une question binaire apporte sur la
+    maitrise du concept qu'elle teste -- complement ferme aux chapitres 6-7,
+    independant de p et de Z (contrairement a information_gain_exact, qui
+    est le gain exact pour UNE question dans UN etat de croyance donne).
+
+    C'est la J-divergence (KL symetrisee) entre les deux lois d'emission du
+    BLIM -- Bern(1-slip) si le concept est maitrise, Bern(guess) sinon --,
+    l'argument de Wald/SPRT sur la derive moyenne du rapport de
+    vraisemblance log-log. Sert a estimer le nombre de questions requises
+    SANS lancer de simulation (cf. questions_needed, et note_calibration.md
+    pour la derivation complete et sa verification empirique contre le
+    benchmark A3).
+
+    Degenere vers 0 quand slip+guess -> 1 : la contrainte BLIM slip+guess<1
+    (Question.__post_init__) est exactement la condition item_information>0,
+    "l'item apporte de l'information".
+    """
+    p1, p0 = 1.0 - slip, guess
+    if not (0.0 < p0 < 1.0 and 0.0 < p1 < 1.0):
+        raise ValueError(
+            f"item_information(slip={slip}, guess={guess}) : 1-slip et guess "
+            "doivent etre strictement entre 0 et 1")
+
+    def kl(p: float, q: float) -> float:
+        return p * np.log(p / q) + (1.0 - p) * np.log((1.0 - p) / (1.0 - q))
+
+    return 0.5 * (kl(p1, p0) + kl(p0, p1))
+
+
+def questions_needed(slip: float, guess: float, n_concepts: int,
+                     target: float = 0.95) -> float:
+    """Nombre approximatif de questions pour amener la confiance de 0.5 a
+    `target` sur chaque concept, sous l'approximation de Wald (le
+    log-rapport de vraisemblance derive en moyenne de item_information nats
+    par question) et l'hypothese de n_concepts concepts independants
+    interroges un par un.
+
+    Approximation, pas une prediction exacte : ignore le partage
+    d'information entre concepts que permet la structure de prerequis (la
+    politique adaptative en tire parti), et le depassement (overshoot) au
+    franchissement du seuil de decision. Verifiee empiriquement contre le
+    benchmark A3 sur piste B (7 concepts, slip=0.10, guess=0.25) : predit
+    19.2 questions, benchmark_a3.py en mesure 18.6 -- accord a 3%, cf.
+    note_calibration.md pour les reserves.
+    """
+    log_odds = np.log(target / (1.0 - target))
+    return n_concepts * log_odds / item_information(slip, guess)
+
+
 def select_next(p: np.ndarray, domain: Domain,
                 asked: set[int]) -> tuple[int, float]:
     """Politique gloutonne : argmax du gain d'information sur les questions non posees.

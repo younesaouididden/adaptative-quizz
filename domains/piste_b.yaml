@@ -5,9 +5,16 @@ description: >
   a 7 concepts des 5 concepts piste A, en subdivisant arithmetic -> {arithmetic_base,
   fractions_ratios} et algebra -> {algebra_linear, algebra_advanced} (les deux
   buckets les plus larges/heterogenes, cf. PROMPT_A2_GRANULARITE.md). slip/guess
-  NON calibres : valeurs expertes (guess = 1/nb_options, slip = 0.10), protocole
-  B1. A ne pas confondre avec data/domain.yaml (piste A, calibre par EM sur les
-  logs Junyi reels).
+  NON calibres empiriquement, mais PAS des valeurs choisies arbitrairement non
+  plus (cf. note_calibration.md) : guess = 1/nb_options est une borne
+  combinatoire conservatrice (guess <= 1/k pour un QCM a k options, egalite ssi
+  les distracteurs sont indiscernables pour un non-maitrisant -- les distracteurs
+  de cette banque incarnent une erreur de raisonnement plausible, donc le vrai
+  guess est probablement inferieur a cette borne). slip = 0.10 n'a aucune
+  justification de premier principe : c'est un point de reference sur un axe a
+  balayer (le benchmark A3 doit verifier que ses conclusions ne dependent pas de
+  ce choix), pas une "valeur experte" figee. A ne pas confondre avec
+  data/domain.yaml (piste A, calibre par EM sur les logs Junyi reels).
 
 concepts:
   - id: arithmetic_base

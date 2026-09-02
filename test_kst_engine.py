@@ -24,6 +24,8 @@ from kst_engine import (
     entropy,
     information_gain_exact,
     information_gain_mc,
+    item_information,
+    questions_needed,
     select_next,
     should_stop,
     simulate,
@@ -280,6 +282,67 @@ class TestInformationGain:
         for q in range(toy_domain.n_questions):
             mc = information_gain_mc(p, toy_domain, q, n_samples=2000, rng=rng)
             assert mc >= -1e-9
+
+
+class TestItemInformation:
+    """Valeurs de reference issues de note_calibration.md (annexe au plan
+    d'action du 2 septembre 2026) -- verifiees a la main a la precision du
+    tableau avant d'etre codees ici."""
+
+    def test_valeur_piste_b(self):
+        # slip=0.10, guess=0.25 (borne QCM 4 options) -> 1.071 nats/question
+        assert item_information(slip=0.10, guess=0.25) == pytest.approx(1.071, abs=1e-3)
+
+    def test_valeur_piste_a_bas_de_plage(self):
+        # slip=0.10, guess=0.50 -> 0.439 nats/question
+        assert item_information(slip=0.10, guess=0.50) == pytest.approx(0.439, abs=1e-3)
+
+    def test_valeur_piste_a_haut_de_plage(self):
+        # slip=0.10, guess=0.75 -> 0.082 nats/question
+        assert item_information(slip=0.10, guess=0.75) == pytest.approx(0.082, abs=1e-3)
+
+    def test_symetrique_en_slip_guess(self):
+        # KL symetrisee : intervertir (1-slip) et guess laisse Ī inchangee
+        assert item_information(slip=0.10, guess=0.30) == pytest.approx(
+            item_information(slip=0.70, guess=0.90))
+
+    def test_tend_vers_zero_quand_slip_plus_guess_tend_vers_un(self):
+        # item_information > 0 <=> slip+guess < 1 (contrainte BLIM,
+        # Question.__post_init__) -- proche de la frontiere (slip+guess=0.99),
+        # l'item n'apporte presque plus rien, contrairement a guess=0.05
+        # (slip+guess=0.15, item tres discriminant)
+        assert item_information(slip=0.10, guess=0.89) < item_information(slip=0.10, guess=0.05)
+        assert item_information(slip=0.10, guess=0.89) < 0.02
+
+    def test_rejette_slip_guess_hors_intervalle_ouvert(self):
+        with pytest.raises(ValueError):
+            item_information(slip=0.0, guess=0.5)  # 1-slip=1, log(.../0) indefini
+        with pytest.raises(ValueError):
+            item_information(slip=0.5, guess=0.0)
+
+
+class TestQuestionsNeeded:
+
+    def test_predit_le_benchmark_a3_piste_b_a_3_pourcent(self):
+        # cf. note_calibration.md §5 : prediction en forme fermee, faite
+        # sans regarder le resultat, mesure du benchmark A3 = 18.6 questions
+        predicted = questions_needed(slip=0.10, guess=0.25, n_concepts=7)
+        assert predicted == pytest.approx(19.2, abs=0.1)
+        assert predicted == pytest.approx(18.6, rel=0.05)  # accord a 3%
+
+    def test_croit_avec_le_nombre_de_concepts(self):
+        n3 = questions_needed(slip=0.10, guess=0.25, n_concepts=3)
+        n7 = questions_needed(slip=0.10, guess=0.25, n_concepts=7)
+        assert n7 == pytest.approx(n3 * 7 / 3)
+
+    def test_piste_a_demande_beaucoup_plus_de_questions_que_piste_b(self):
+        # cf. note_calibration.md §6 : le guess mesure en piste A (0.50-0.75)
+        # rend le benchmark A3 infaisable sous le plafond actuel de 30
+        piste_b = questions_needed(slip=0.10, guess=0.25, n_concepts=5)
+        piste_a_bas = questions_needed(slip=0.10, guess=0.50, n_concepts=5)
+        piste_a_haut = questions_needed(slip=0.10, guess=0.75, n_concepts=5)
+        assert piste_a_bas > piste_b
+        assert piste_a_haut > piste_a_bas
 
 
 class TestSelectNext:

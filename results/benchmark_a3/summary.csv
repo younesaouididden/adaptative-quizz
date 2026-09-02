@@ -1,0 +1,4 @@
+politique,n_questions_moyen,n_questions_std,exactitude_etat_exact,exactitude_par_concept
+adaptatif,18.62,5.08,0.800,0.957
+aleatoire,27.68,3.44,0.820,0.966
+cat_irt,30.00,0.00,0.040,0.663

@@ -58,7 +58,7 @@ Pipeline complet et fonctionnel :
 ## 3. Piste B — banque de démo (reprise récemment)
 
 Piste B (banque de questions écrites à la main, séparée de la piste A) était **en pause** depuis le début du projet. Reprise et étendue récemment :
-- Domaine passé de 5 à **7 concepts**, en subdivisant précisément les deux buckets identifiés comme les plus larges/hétérogènes dans la saga du `guess` (`arithmetic` → `arithmetic_base` + `fractions_ratios`, `algebra` → `algebra_linear` + `algebra_advanced`). Argument clé : le problème d'hétérogénéité qui bloquait cette subdivision en piste A **ne s'applique pas ici**, puisque piste B utilise des valeurs `slip`/`guess` **expertes non calibrées** (`guess = 1/nb_options = 0,25`, `slip = 0,10`), pas une calibration empirique.
+- Domaine passé de 5 à **7 concepts**, en subdivisant précisément les deux buckets identifiés comme les plus larges/hétérogènes dans la saga du `guess` (`arithmetic` → `arithmetic_base` + `fractions_ratios`, `algebra` → `algebra_linear` + `algebra_advanced`). Argument clé : le problème d'hétérogénéité qui bloquait cette subdivision en piste A **ne s'applique pas ici**, puisque piste B n'utilise pas de calibration empirique : `guess = 1/nb_options = 0,25` est une **borne combinatoire conservatrice** (`guess ≤ 1/k` pour un QCM à `k` options, pas une valeur choisie), `slip = 0,10` un **point de référence sur un axe à balayer** (aucun argument de premier principe ne fixe `slip`).
 - 35 questions écrites à la main (5 par concept, difficulté variée, distracteurs pensés pour incarner une erreur de raisonnement plausible plutôt qu'absurde).
 - `|Z| = 50` pour ce domaine.
 - Infrastructure : `domains/piste_b.yaml` (schéma config, jamais de contenu en dur dans le code), `domains/loader.py` (chargeur générique), `domains/validate.py` (validateur : cycles, `slip+guess<1`, ≥3 questions/concept, ids uniques), `domains/test_loader.py` (8 tests).
@@ -101,7 +101,7 @@ Limite assumée et documentée : les paramètres IRT (a, b, c) sont **dérivés*
 - **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
 - **L'hypothèse d'hétérogénéité des concepts** (piste A, cause du `guess` dégénéré) n'a jamais été formellement testée (le "D1" du plan de diagnostic original) — juste contournée par la simplification à 5 concepts. Reste une piste si le temps le permet.
 - **Rédaction du rapport scientifique lui-même** — les résultats numériques existent (calibration piste A, benchmark A3) mais rien n'est encore rédigé en dur dans un document de mémoire/rapport.
-- Le benchmark A3 n'a été exécuté que sur piste B (paramètres experts) — le refaire tourner sur le domaine piste A (5 concepts, calibré empiriquement sur Junyi) donnerait un second point de comparaison, pas encore fait.
+- Le benchmark A3 n'a été exécuté que sur piste B (`guess` borné, `slip` fixé à un seul point) — le refaire tourner sur le domaine piste A (5 concepts, calibré empiriquement sur Junyi) donnerait un second point de comparaison ; il faudra un plafond de questions relevé (150, pas 30 — cf. `note_calibration.md` §6), sinon on mesure le plafond et non la méthode. Pas encore fait.
 
 ---
 
