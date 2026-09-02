@@ -71,6 +71,27 @@ Table brute : `benchmark_a3_table.csv`. Figure prête pour le mémoire : `benchm
 - Comme piste B n'est pas calibrée empiriquement, ce benchmark mesure le **gain algorithmique** des politiques de sélection sur une banque donnée, pas une validation empirique des paramètres — à formuler ainsi dans le rapport, distinct de la piste A (calibration réelle sur Junyi Academy).
 - 10 tests dans `test_irt_baseline.py`, dont un test de récupération de paramètre (θ connu, EAP le retrouve en moyenne sur plusieurs étudiants simulés — même logique que le test EM de piste A) et un test sur la formule d'information de Fisher.
 
+### Lot 1 — validation de l'approximation Monte Carlo (branche `lot5-vocabulaire-theorie`, en cours)
+`kst_engine.information_gain_mc` a désormais un paramètre `mode` :
+- `mode="sample_y"` (existant) : échantillonne les réponses. Un item étant binaire, il n'existe que **deux** postérieurs possibles quel que soit `N` — optimisé pour ne les calculer qu'une fois chacun (tirage binomial du compte, au lieu d'une boucle Python de `N` `bayes_update`). Coût final `O(|Z|)`, **le même ordre que `information_gain_exact`**, pour une valeur seulement approchée — la démonstration concrète de l'argument du préambule du Lot 1 (échantillonner `y` pour un item binaire est strictement pire que calculer l'exact). N'attaque pas le goulot réel (`|Z|`).
+- `mode="sample_z"` (nouveau) : échantillonne les **états** `z ~ p(z)`, via la décomposition duale `I(Z;Y|a) = H(Y|a) − E_z[H(Y|a,z)]`. Coût `O(N)`, **indépendant de `|Z|`** — c'est la variante qui attaque le vrai goulot. Biais de plug-in vers le bas à petit `N` (Jensen, terme `H(Y|a)` non-linéaire en la moyenne empirique), qui se résorbe quand `N` grandit — propriété testée, pas un bug.
+
+`pi_hat(p, domain, asked, n_samples, mode)` = π̂_N (notation du plan) : même structure gloutonne que `pi_star`, mais chaque candidat est évalué par `information_gain_mc` au lieu de `information_gain_exact`.
+
+**E1 — fidélité de la politique**, sur 438 croyances issues de **vraies trajectoires** adaptatives (piste B, 20 états de `Z` rejoués avec `pi_star`, pas des priors uniformes artificiels) :
+
+| N | accord `sample_y` | regret `sample_y` | accord `sample_z` | regret `sample_z` |
+|---|---|---|---|---|
+| 1 | 20 % | 79 % | 10 % | 44 % |
+| 10 | 29 % | 94 % | 20 % | 87 % |
+| 100 | 33 % | 99 % | 29 % | 97 % |
+
+Table brute : `results/lot1_e1/raw.csv` (52 560 lignes). Figure : `results/lot1_e1/figure.pdf`.
+
+**Lecture** : le taux d'accord est trompeur, exactement comme le plan l'annonçait — même à `N=100`, π̂_N ne retombe sur l'argmax exact que ~30 % du temps, mais la question choisie reste à ~97-99 % du gain d'information optimal. Le regret est la métrique honnête. `sample_z` a besoin d'environ **3 à 5× plus d'échantillons** que `sample_y` pour un regret équivalent (ex. `sample_y` à N=10 ≈ `sample_z` à N=30) — attendu, puisque `sample_y` profite gratuitement du calcul exact de `p_correct` (coût `O(|Z|)` déjà payé) alors que `sample_z` ne touche jamais `Z` en entier. Sur `|Z|=50` (piste B), calculer l'exact reste trivialement le meilleur choix des deux côtés — `sample_z` ne devient intéressant qu'à partir d'un `|Z|` où `O(|Z|)` dépasse `O(N≈30)`, seuil **pas encore mesuré** (c'est le rôle d'E3, pas fait).
+
+**Reste du Lot 1 (pas fait)** : E2 (rejouer le benchmark complet avec π̂_N, coût en aval sur le nombre de questions/l'exactitude), E3 (temps de calcul exact vs MC en fonction de `|Z|`, sur domaines synthétiques 5 à 13 concepts — c'est ce qui donnerait le seuil `|Z|` chiffré), 1.5 (figure `|Z|` vs nombre de concepts).
+
 ---
 
 ## 3. Artifacts annexes (hors pipeline de production, mais dans le repo)

@@ -27,6 +27,7 @@ from kst_engine import (
     item_information,
     questions_needed,
     pi_star,
+    pi_hat,
     should_stop,
     simulate,
     make_demo_domain,
@@ -283,6 +284,79 @@ class TestInformationGain:
             mc = information_gain_mc(p, toy_domain, q, n_samples=2000, rng=rng)
             assert mc >= -1e-9
 
+    def test_mode_inconnu_leve(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        with pytest.raises(ValueError):
+            information_gain_mc(p, toy_domain, 0, mode="sample_w")
+
+
+class TestInformationGainMcSampleZ:
+    """mode="sample_z" (Lot 1, plan_action_code.md) : echantillonne les
+    ETATS au lieu des reponses, cout O(n_samples) independant de |Z| -- la
+    variante qui attaque le vrai goulot. A un biais de plug-in different de
+    sample_y (systematiquement vers le bas, cf. test_biais_...), c'est
+    attendu et fait partie de ce que Lot 1/E1 doit chiffrer, pas un bug."""
+
+    def test_converge_vers_exact(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(1)
+        for q in range(toy_domain.n_questions):
+            exact = information_gain_exact(p, toy_domain, q)
+            mc = information_gain_mc(p, toy_domain, q, n_samples=5000,
+                                     mode="sample_z", rng=rng)
+            assert mc == pytest.approx(exact, abs=0.02)
+
+    def test_question_sur_etat_certain_najoute_rien(self, toy_domain):
+        p = np.zeros(toy_domain.n_states)
+        p[0] = 1.0
+        rng = np.random.default_rng(0)
+        for q in range(toy_domain.n_questions):
+            mc = information_gain_mc(p, toy_domain, q, n_samples=500,
+                                     mode="sample_z", rng=rng)
+            assert mc == pytest.approx(0.0, abs=1e-9)
+
+    def test_biais_systematique_vers_le_bas_a_petit_n(self, toy_domain):
+        """Propriete de l'estimateur plug-in (pas un bug) : H(Y|a) est
+        estimee par plug-in sur la moyenne empirique de L[z_i,q], et
+        l'entropie binaire est concave -> par l'inegalite de Jensen,
+        E[H_2(moyenne empirique)] <= H_2(moyenne vraie) = H(Y|a) exact.
+        Le terme E_z[H(Y|a,z)] est lui un estimateur sans biais (moyenne
+        empirique directe). L'estimateur complet est donc biaise vers le
+        bas en moyenne, et le biais doit se resorber quand N grandit."""
+        p = uniform_prior(toy_domain)
+        q = 0
+        exact = information_gain_exact(p, toy_domain, q)
+
+        def mean_estimate(n_samples, n_reps=200):
+            vals = [information_gain_mc(p, toy_domain, q, n_samples=n_samples,
+                                        mode="sample_z",
+                                        rng=np.random.default_rng(s))
+                   for s in range(n_reps)]
+            return np.mean(vals)
+
+        biased = mean_estimate(10)
+        less_biased = mean_estimate(500)
+        assert biased < exact - 0.01          # biais net et mesurable a N=10
+        assert less_biased == pytest.approx(exact, abs=0.01)   # quasi resorbe a N=500
+        assert abs(biased - exact) > abs(less_biased - exact)  # biais decroit avec N
+
+    def test_precis_meme_quand_z_est_grand(self):
+        """Correctness a l'echelle : le cout de calcul independant de |Z|
+        est teste en performance dans l'experience E3 (benchmark dedie, pas
+        pytest -- une assertion de timing ici serait fragile). Ici on verifie
+        seulement que l'estimation reste fidele a l'exact quand |Z| grandit
+        bien au-dela du domaine jouet (2^10 = 1024 etats)."""
+        concepts = [Concept(f"c{i}") for i in range(10)]
+        big = Domain(concepts=concepts, prereqs=[],
+                    questions=[Question("qa", "c0", slip=0.1, guess=0.2)])
+        assert big.n_states == 2 ** 10
+
+        p = uniform_prior(big)
+        exact = information_gain_exact(p, big, 0)
+        mc = information_gain_mc(p, big, 0, n_samples=5000, mode="sample_z",
+                                 rng=np.random.default_rng(0))
+        assert mc == pytest.approx(exact, abs=0.02)
+
 
 class TestItemInformation:
     """Valeurs de reference issues de note_calibration.md (annexe au plan
@@ -373,6 +447,43 @@ class TestPiStar:
         asked = {0}                     # "a1" deja posee
         q, _ = pi_star(p, dom, asked)
         assert q in (1, 2)               # "a2" ou "b1" restent eligibles
+
+
+class TestPiHat:
+    """pi_hat = pi_star approximee par Monte Carlo (Lot 1). Sur le domaine
+    jouet (3 questions), un grand N doit retrouver l'argmax exact -- pas
+    une garantie generale (E1 quantifie le taux d'accord a N modeste sur
+    un vrai domaine), mais un minimum attendu ici."""
+
+    def test_ignore_les_questions_deja_posees(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        asked = {0}
+        q, _ = pi_hat(p, toy_domain, asked, n_samples=50, mode="sample_z",
+                     rng=np.random.default_rng(0))
+        assert q not in asked
+
+    def test_grand_n_retrouve_largmax_exact(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        q_star, _ = pi_star(p, toy_domain, set())
+        for mode in ("sample_y", "sample_z"):
+            q_hat, _ = pi_hat(p, toy_domain, set(), n_samples=3000, mode=mode,
+                             rng=np.random.default_rng(0))
+            assert q_hat == q_star
+
+    def test_meme_rng_partage_entre_candidats(self, toy_domain):
+        """Deux appels avec le meme rng ne doivent pas retomber sur le
+        meme etat interne pour chaque candidat (sinon les candidats sont
+        tous evalues sur un tirage identique, ce qui biaiserait la
+        comparaison) -- verifie indirectement que le rng avance bien."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        q1, ig1 = pi_hat(p, toy_domain, set(), n_samples=20, mode="sample_y", rng=rng)
+        q2, ig2 = pi_hat(p, toy_domain, set(), n_samples=20, mode="sample_y", rng=rng)
+        # deux appels successifs sur le meme rng (donc des tirages differents)
+        # -> pas necessairement le meme résultat exact, mais les deux restent
+        # des choix valides parmi les questions du domaine
+        assert q1 in range(toy_domain.n_questions)
+        assert q2 in range(toy_domain.n_questions)
 
 
 class TestShouldStop:

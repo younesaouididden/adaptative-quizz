@@ -222,34 +222,99 @@ def information_gain_exact(p: np.ndarray, domain: Domain, q: int) -> float:
     return ig
 
 
+def _binary_entropy(x: np.ndarray | float) -> np.ndarray | float:
+    """H_2(x) = -x.log2(x) - (1-x).log2(1-x), l'entropie de Bernoulli(x).
+
+    Clippe a EPS des bords : lim x->0,1 de x.log2(x) est 0, pas indefini,
+    donc clipper est exact a EPS pres, pas une approximation biaisee (meme
+    raisonnement que le filtre p>EPS de entropy())."""
+    x = np.clip(x, EPS, 1.0 - EPS)
+    return -(x * np.log2(x) + (1.0 - x) * np.log2(1.0 - x))
+
+
 def information_gain_mc(p: np.ndarray, domain: Domain, q: int,
                         n_samples: int = 200,
+                        mode: str = "sample_y",
                         rng: np.random.Generator | None = None) -> float:
-    """Estimateur Monte Carlo de IG via E_y[ KL(posterior || p) ] (chapitres 4-7).
+    """Estimateur Monte Carlo de IG(a;p) (chapitres 4-7, Lot 1 du plan
+    d'action -- cf. plan_action_code.md pour le preambule methodologique
+    complet sur les deux modes).
 
-    Ici il est inutile (|Y| = 2), mais on le garde pour verifier empiriquement
-    la convergence vers la valeur exacte -- et il devient indispensable des
-    que les reponses sont a choix multiples ou que |Z| est grand.
+    mode="sample_y" (estimateur original, diapo 7 de la presentation d'aout)
+    Echantillonne les REPONSES y ~ P(.|a,p), via E_y[ KL(posterior || p) ].
+    Pour un item binaire |Y|=2, il n'existe que DEUX posteriors possibles
+    quel que soit n_samples : on tire un seul compte binomial et on pondere
+    les deux posteriors (deja calcules une fois chacun) au lieu de boucler
+    bayes_update n_samples fois -- optimisation pure, meme quantite estimee.
+    Cout final O(|Z|), independant de n_samples -- **exactement le meme
+    ordre que information_gain_exact**, pour une valeur seulement APPROCHEE.
+    C'est la demonstration silencieuse de l'argument du preambule du Lot 1 :
+    echantillonner y pour un item binaire est strictement pire que calculer
+    l'exact (information_gain_exact le fait deja, au meme cout, sans bruit).
+    Garde pour comparaison empirique (E1-E3) et parce que l'approche devient
+    necessaire des que les reponses sont a choix multiples (|Y|>2) ou que
+    l'action est un bloc de plusieurs questions (|Y|=2^k) -- non implemente
+    ici, cf. Lot 1. N'attaque PAS le goulot reel, qui est |Z|.
 
-    Piege (chapitre 4-5) : lisser SEULEMENT le denominateur du KL,
-    log(P / (Q+eps)), biaise l'estimateur et peut le rendre negatif. On
-    lisse donc les deux distributions avec la meme formule
-    p <- (p+eps)/(1+|Z|*eps) avant de calculer le KL.
+    mode="sample_z" (attaque le goulot |Z|)
+    Echantillonne les ETATS z_i ~ p(z) (PAS les reponses), et utilise la
+    decomposition duale de l'information mutuelle
+        I(Z;Y|a) = H(Y|a) - E_z[ H(Y|a,z) ]
+    au lieu de H(Y|a) - E_y[ H(Z|a,y) ]. H(Y|a,z) est l'entropie binaire de
+    L[z,q] (P(correct|z,q), une lecture directe -- deterministe une fois z
+    fixe, aucun bayes_update). H(Y|a) est estimee par le meme echantillon
+    (plug-in sur la moyenne empirique de L[z_i,q]), pas calculee exactement
+    sur Z : cout O(n_samples), INDEPENDANT de |Z|. C'est cette variante qui
+    repond a la question du Lot 1 -- "en dessous de quel |Z| calculer
+    l'exact, au-dela utiliser MC avec quel N" -- puisque c'est la seule a ne
+    jamais parcourir Z en entier. Biais de plug-in sur le terme H(Y|a)
+    (fonction non-lineaire de la moyenne empirique) qui s'attenue avec N :
+    exactement le compromis biais-variance-temps que E1 doit chiffrer.
+
+    Piege commun aux deux modes (chapitre 4-5) : lisser SEULEMENT le
+    denominateur du KL, log(P / (Q+eps)), biaise l'estimateur et peut le
+    rendre negatif. On lisse donc les deux distributions avec la meme
+    formule p <- (p+eps)/(1+|Z|*eps) avant de calculer le KL (mode sample_y
+    uniquement -- sample_z n'a pas de KL sur Delta(Z), donc pas ce piege).
     """
     rng = rng or np.random.default_rng()
+
+    if mode == "sample_z":
+        idx = rng.choice(len(p), size=n_samples, p=p)
+        p_correct_i = domain.L[idx, q]                    # P(correct|z_i,q), lecture directe
+        p_correct_hat = float(p_correct_i.mean())
+        h_y = float(_binary_entropy(p_correct_hat))
+        h_y_given_z = float(np.mean(_binary_entropy(p_correct_i)))
+        return h_y - h_y_given_z
+
+    if mode != "sample_y":
+        raise ValueError(f"information_gain_mc: mode={mode!r} inconnu "
+                        "(attendu 'sample_y' ou 'sample_z')")
+
     p_correct = float(np.dot(p, domain.L[:, q]))
-    ys = rng.random(n_samples) < p_correct
     n_z = len(p)
 
     def smooth(dist: np.ndarray) -> np.ndarray:
         return (dist + EPS) / (1.0 + n_z * EPS)
 
     p_s = smooth(p)
+    # y est binaire (|Y|=2) : il n'existe que DEUX posteriors possibles,
+    # quel que soit n_samples. Plutot que boucler n_samples fois sur
+    # bayes_update (identique a chaque tirage correct=True, ou a chaque
+    # tirage correct=False), on tire un seul compte binomial et on
+    # pondere les deux posteriors deja calcules -- resultat identique a
+    # la boucle naive (meme formule, juste factorisee), mais O(1) appels a
+    # bayes_update au lieu de O(n_samples). Optimisation pure, aucun
+    # changement de la quantite estimee (les tests de convergence
+    # utilisent des tolerances, pas des valeurs figees).
+    n_correct = int(rng.binomial(n_samples, p_correct))
     total = 0.0
-    for y in ys:
-        post = bayes_update(p, domain, q, bool(y))
+    for correct, count in ((True, n_correct), (False, n_samples - n_correct)):
+        if count == 0:
+            continue
+        post = bayes_update(p, domain, q, correct)
         post_s = smooth(post)
-        total += float(np.sum(post_s * np.log2(post_s / p_s)))
+        total += count * float(np.sum(post_s * np.log2(post_s / p_s)))
     return total / n_samples
 
 
@@ -324,6 +389,35 @@ def pi_star(p: np.ndarray, domain: Domain,
         if q in asked:
             continue
         ig = information_gain_exact(p, domain, q)
+        if ig > best_ig:
+            best, best_ig = q, ig
+    return best, best_ig
+
+
+def pi_hat(p: np.ndarray, domain: Domain, asked: set[int],
+          n_samples: int = 30, mode: str = "sample_z",
+          rng: np.random.Generator | None = None) -> tuple[int, float]:
+    """Politique approximee π̂_N(p) = argmax_a IG_MC(a;p) (Lot 1,
+    plan_action_code.md) : meme structure gloutonne que pi_star, mais le
+    gain d'information de chaque candidat est estime par
+    information_gain_mc (mode, n_samples) au lieu d'etre calcule
+    exactement -- c'est la politique que E1/E2 comparent a pi_star.
+
+    Un seul rng est partage entre tous les candidats d'un meme appel (pas
+    un rng par candidat) : c'est ce qui rend la comparaison entre candidats
+    a l'interieur d'un meme appel coherente d'un tirage a l'autre.
+
+    Retourne (indice de la question choisie, son gain d'information ESTIME
+    -- pas le gain exact de cette question : comparer information_gain_exact
+    de la question retournee a celle de pi_star donne le regret d'E1, pas
+    cette valeur-ci).
+    """
+    rng = rng or np.random.default_rng()
+    best, best_ig = None, -np.inf
+    for q in range(domain.n_questions):
+        if q in asked:
+            continue
+        ig = information_gain_mc(p, domain, q, n_samples=n_samples, mode=mode, rng=rng)
         if ig > best_ig:
             best, best_ig = q, ig
     return best, best_ig

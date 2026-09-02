@@ -95,7 +95,28 @@ Limite assumée et documentée : les paramètres IRT (a, b, c) sont **dérivés*
 
 ---
 
-## 5. Ce qui reste ouvert / non résolu
+## 5. Lot 1 — validation de l'approximation Monte Carlo (en cours)
+
+La présentation d'août posait l'estimateur Monte Carlo comme un compromis biais-variance-temps sans le chiffrer. `kst_engine.information_gain_mc` a maintenant deux modes, comparés à `information_gain_exact` comme référence :
+
+- **`sample_y`** (existant) : échantillonne les réponses. Un item étant binaire, il n'existe que deux postérieurs possibles quel que soit `N` — optimisé pour ne les calculer qu'une fois chacun. Coût final `O(|Z|)`, le même ordre que l'exact, pour une valeur seulement approchée : la démonstration concrète que échantillonner `y` pour un item binaire est strictement pire que calculer l'exact. N'attaque pas le goulot réel (`|Z|`).
+- **`sample_z`** (nouveau) : échantillonne les **états** plutôt que les réponses, via la décomposition duale de l'information mutuelle. Coût `O(N)`, indépendant de `|Z|` — la variante qui attaque le vrai goulot.
+
+**E1 (fidélité de la politique)**, sur 438 croyances issues de **vraies trajectoires** adaptatives (piste B, pas des priors uniformes artificiels) :
+
+<p align="center">
+  <img src="lot1_e1_figure.png" alt="Lot 1 E1 : fidelite de la politique approximee" width="700">
+</p>
+
+*Figure 4 — taux d'accord et regret en gain d'information, π̂_N vs π* (politique exacte), pour N ∈ {1,3,5,10,30,100}. Table brute : `results/lot1_e1/raw.csv` (52 560 lignes).*
+
+**Résultat à retenir** : le taux d'accord est trompeur — même à N=100, π̂_N ne retombe sur l'argmax exact que ~30 % du temps, mais la question choisie reste à 97-99 % du gain d'information optimal. Le **regret** est la métrique honnête, exactement comme l'annonçait le plan. `sample_z` a besoin d'environ 3 à 5× plus d'échantillons que `sample_y` pour un regret équivalent — attendu, puisque `sample_y` profite gratuitement du calcul exact de `p_correct` (déjà payé), alors que `sample_z` ne touche jamais `Z` en entier. Sur `|Z|=50` (piste B), calculer l'exact reste le meilleur choix des deux côtés — `sample_z` ne devient intéressant qu'au-delà d'un seuil de `|Z|` pas encore mesuré (rôle d'E3, à venir).
+
+**Reste du Lot 1** : E2 (coût en aval — rejouer le benchmark complet avec π̂_N), E3 (temps de calcul exact vs MC en fonction de `|Z|`, sur domaines synthétiques), 1.5 (figure `|Z|` vs nombre de concepts).
+
+---
+
+## 6. Ce qui reste ouvert / non résolu
 
 - **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
 - **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
@@ -105,6 +126,6 @@ Limite assumée et documentée : les paramètres IRT (a, b, c) sont **dérivés*
 
 ---
 
-## 6. Style de travail établi sur ce projet
+## 7. Style de travail établi sur ce projet
 
 Petits incréments testables, un test pytest par fonction sur fixtures synthétiques (jamais les fichiers réels multi-millions de lignes), fonctions mathématiques commentées avec le numéro de chapitre de la monographie correspondant, commit+push après chaque étape significative avec messages détaillés, documents de passation écrits à chaque décision importante.
