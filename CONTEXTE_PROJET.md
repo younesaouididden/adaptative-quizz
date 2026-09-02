@@ -44,11 +44,14 @@ prerequisites: [algebra, analytic_geometry], [arithmetic, geometry]
 
 slip/guess calibrés (voir `data/domain.yaml` pour les valeurs exactes) — **`guess` reste élevé (0,50-0,75) pour la plupart des concepts**. Ce n'est PAS un bug : diagnostiqué en profondeur (§4), c'est une limite structurelle du jeu de données complet (buckets de concepts hétérogènes), documentée et acceptée pour cette V1 ("Option 1 — accepter et documenter" du tout premier arbitrage de granularité).
 
-### App de démonstration (`app.py`, Streamlit)
-Réutilise **directement** `kst_engine.py` (pas de réimplémentation) + `data/domain.yaml`. Banque de 18 questions écrites à la main (Junyi ne fournit que des logs d'interaction, jamais d'énoncés — Piste B est en pause). Écran final = diagnostic par concept (maîtrisé/lacune/incertain), pas un score.
+### App de démonstration (`app.py`, Streamlit) — **piste B reprise**
+Réutilise **directement** `kst_engine.py` (pas de réimplémentation), mais charge désormais `domains/piste_b.yaml`, **pas** `data/domain.yaml` (piste A). Piste B n'est plus en pause : domaine étendu de 5 à 7 concepts en subdivisant `arithmetic` → `{arithmetic_base, fractions_ratios}` et `algebra` → `{algebra_linear, algebra_advanced}` (les deux buckets les plus larges/hétérogènes identifiés en §4), 35 questions écrites à la main (5/concept, difficulté variée, distracteurs plausibles), `slip`/`guess` = valeurs **expertes non calibrées** (`guess = 1/nb_options = 0.25`, `slip = 0.10`) — le problème de calibration EM de la piste A (guess dégénéré) ne s'applique pas ici puisqu'il n'y a pas de calibration empirique. `|Z| = 50`. Écran final = diagnostic par concept (maîtrisé/lacune/incertain), pas un score.
 
-- Déployée sur Streamlit Community Cloud (`app.py` + `requirements.txt` + `.streamlit/config.toml` à la racine).
-- **Bug corrigé récemment** : `pick_next()` ne faisait jamais passer `stage` à `"quiz"` — l'écran d'intro semblait bloqué au clic. Corrigé (commit `7558349`), vérifié par interaction réelle en local.
+- `domains/loader.py` (chargeur YAML→`Domain`, générique, garde `kst_engine.py` sans dépendance hors numpy), `domains/validate.py` (validateur B2 : cycle, `slip+guess<1`, ≥3 questions/concept, ids uniques, index de réponse valide), `domains/test_loader.py` (8 tests sur fixtures synthétiques).
+- L'UI ne prétend plus être calibrée sur Junyi (c'était vrai pour l'ancien domaine à 5 concepts issu de piste A, faux pour piste B) — important pour l'honnêteté du rapport de stage.
+- `data/domain.yaml` (piste A, calibré EM, 5 concepts) reste intact et utilisable indépendamment pour le pipeline de calibration/benchmark — seul l'app de démo a changé de domaine.
+- Déployée sur Streamlit Community Cloud (`app.py` + `requirements.txt` + `.streamlit/config.toml` à la racine) — **à redéployer/rafraîchir après ce changement**.
+- **Bug corrigé précédemment** : `pick_next()` ne faisait jamais passer `stage` à `"quiz"` — l'écran d'intro semblait bloqué au clic. Corrigé (commit `7558349`), vérifié par interaction réelle en local.
 - **Accès collègue** : le repo GitHub est privé → l'app Streamlit est privée par défaut. Pour donner accès : Share (en haut à droite de l'app) → ajouter l'e-mail du collègue comme viewer. Alternative : ajouter comme collaborateur GitHub. Rendre le repo public est une option mais expose le code source — pas fait par défaut, à la décision de l'utilisateur.
 
 ---
@@ -97,7 +100,9 @@ Réutilise **directement** `kst_engine.py` (pas de réimplémentation) + `data/d
 
 ## 7. Où on en est précisément, là maintenant
 
-- Domaine V1 (5 concepts) calibré, committé, poussé.
-- App Streamlit fonctionnelle, bug d'écran bloqué corrigé, poussée sur GitHub.
-- Question ouverte et non résolue : accès du collègue à l'app déployée (réponse donnée : ajouter son e-mail via "Share" sur l'app, ou comme collaborateur GitHub — action à faire par l'utilisateur lui-même, pas par l'agent).
-- **Pas de prochaine tâche explicitement actée** au moment de ce document — dernière chose faite était de répondre à la question d'accès. Demander à l'utilisateur ce qu'il veut faire ensuite (Sprint 1 API FastAPI ? A3 benchmark vs CAT-IRT ? Retour sur la qualité de calibration ? Piste B ? Présentation/soutenance ?) plutôt que de supposer.
+- **Décision actée** : le rendu est un **rapport scientifique** (stage recherche), Streamlit suffit pour la démo/soutenance → **Sprint 1 (API FastAPI) explicitement écarté pour l'instant**, pas de valeur sans frontend Next.js prévu.
+- **Piste B reprise et étendue** (5 → 7 concepts, commit `d7b74a6`) : `domains/piste_b.yaml` + `domains/loader.py` + `domains/validate.py` + `domains/test_loader.py`, 35 questions, `app.py` bascule dessus. 108 tests passent, app vérifiée en navigateur (intro → quiz → résultats, diagnostic correct sur les 7 concepts). Poussé sur GitHub.
+- **Piste A intacte**, non touchée par ce travail — `data/domain.yaml` (5 concepts calibrés EM) reste le domaine de référence pour la calibration/le futur benchmark A3.
+- **Prochaine étape actée mais pas commencée** : le benchmark (adaptatif / aléatoire / IRT) reste envisagé après la piste B — `kst_engine.simulate()` existe déjà et fonctionne sur n'importe quel domaine (testé manuellement sur `domains/piste_b.yaml` : 11 à 30 questions selon l'état simulé, moyenne ≈18,6). Ce qui manque : la baseline CAT-IRT (3PL, critère de Fisher), à ajouter pour un vrai A3. Cadrage discuté : sur piste B ça mesure le **gain algorithmique** (comparaison de politiques de sélection), pas une validation empirique — à formuler clairement ainsi dans le rapport, distinct de la calibration réelle de piste A.
+- Question restée ouverte (non résolue, action à l'utilisateur) : accès du collègue à l'app déployée sur Streamlit Community Cloud — **à redéployer** après ce changement de domaine (Share → ajouter son e-mail, ou collaborateur GitHub).
+- **Pas de prochaine tâche explicitement actée au-delà de ça** — demander à l'utilisateur s'il veut enchaîner sur le benchmark CAT-IRT maintenant, ou autre chose, plutôt que de supposer.
