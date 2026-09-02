@@ -100,6 +100,23 @@ Table brute : `results/lot1_e1/raw.csv` (52 560 lignes). Figure : `results/lot1_
 
 **Reste du Lot 1** : 1.5 (figure `|Z|` vs nombre de concepts pour les domaines réels + synthétiques — cosmétique, E3 couvre déjà l'essentiel).
 
+### Lot 2 — ancrage géométrique (branche `lot5-vocabulaire-theorie`, fait)
+
+Les chapitres 4-5 du rapport portent sur Fisher-Rao, les géodésiques, le gradient naturel — les résultats n'avaient jusque-là aucun objet géométrique. Ajouté à `kst_engine.py` :
+
+- **`fisher_rao_distance(p, q)`** (2.1) : `d(p,q) = 2·arccos(Σ_z √(p(z)·q(z)))`, forme fermée via le plongement racine `x=2√p` dans l'octant positif d'une sphère de rayon 2. Clip `[-1,1]` sur l'affinité (piège classique du projet : arccos indéfini si l'affinité dépasse 1 par arrondi flottant).
+- **`cumulative_arc_length(belief_trace)`** (2.1) : longueur d'arc cumulée le long d'une trajectoire de croyances.
+- **`expected_fisher_rao_step(slip, guess, prior)`** (2.4) : déplacement géométrique moyen sur `Δ({non-maîtrise, maîtrise})` après une réponse — distinct d'`item_information` (Lot 1, mesure KL/Wald), mais **classe les mêmes configurations dans le même ordre** (testé, `test_coherent_avec_item_information_sur_le_classement`) : deux angles indépendants sur le même phénomène.
+- `simulate()` renvoie désormais aussi `belief_trace` (séquence complète des croyances, pas seulement l'entropie) — extension additive, aucune rupture de compatibilité.
+
+**2.2 — longueur d'arc cumulée** (`lot2_2_arc_length.py`), piste B, 50 états, adaptatif vs aléatoire (même graine, comparaison appariée) : l'adaptatif parcourt davantage de distance par question en début de trajectoire (pente plus forte jusqu'à t≈15), exactement la prédiction du plan — puis plafonne plus tôt (il s'arrête après moins de questions), pendant que l'aléatoire continue d'accumuler et le dépasse en distance totale.
+
+**2.3 — trajectoire sur la sphère** (`lot2_3_sphere_trajectory.py`) : domaine minimal à 3 états (`Z={∅,{a},{a,b}}`), trajectoire `p₀→p_T` tracée sur l'octant positif via `x=2√p` — l'illustration théorique de la semaine 2, avec une vraie trajectoire simulée (π*, z_true={a,b}) plutôt qu'un schéma.
+
+**2.4 — effondrement géométrique vs `(slip,guess)`** (`lot2_4_fisher_info_slip_guess.py`) : courbe à `slip=0,10` fixe, avec les 5 concepts piste A (calibrés EM, `guess` 0,50–0,75) et piste B (`guess=0,25`) marqués avec leurs vraies valeurs. **Résultat net** : les concepts piste A se classent `probability_statistics > algebra > analytic_geometry > geometry > arithmetic` en déplacement géométrique — **exactement le même ordre** qu'en `item_information` (Lot 1). Piste B (déplacement ≈0,72) domine largement tous les concepts piste A (déplacement 0,15–0,36). **La saga du `guess` dégénéré (§4) cesse d'être une limite documentée après coup et devient une prédiction quantitative de la théorie, vérifiée sur données réelles par deux mesures indépendantes qui s'accordent** — l'effet narratif exact que visait le Lot 2.
+
+Table brute et figures : `results/lot2_2_arc_length/`, `results/lot2_3_sphere/`, `results/lot2_4_fisher_info/`. 12 nouveaux tests (`TestFisherRaoDistance`, `TestCumulativeArcLength`, `TestExpectedFisherRaoStep`, + 3 sur `belief_trace`), 157 tests passent au total.
+
 ---
 
 ## 3. Artifacts annexes (hors pipeline de production, mais dans le repo)

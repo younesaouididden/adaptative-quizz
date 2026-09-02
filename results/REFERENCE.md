@@ -16,10 +16,14 @@ experience (Lots 1 a 4).
 
 Commit et date exacts de la dernière exécution : voir `results/<experience>/run.log` (généré à chaque run, fait foi sur ce tableau si divergence).
 
+| Lot 2.2 — longueur d'arc cumulée sur Δ(Z), adaptatif vs aléatoire, piste B | [`lot2_2_arc_length.py`](../lot2_2_arc_length.py) | `python lot2_2_arc_length.py` | `seed` = index de l'état (0–49), même graine pour les deux politiques (comparaison appariée) | [`raw.csv`](lot2_2_arc_length/raw.csv), [`summary.csv`](lot2_2_arc_length/summary.csv), [`figure.pdf`](lot2_2_arc_length/figure.pdf), [`run.log`](lot2_2_arc_length/run.log) |
+| Lot 2.3 — trajectoire sur la sphère de Fisher-Rao, domaine à 3 états | [`lot2_3_sphere_trajectory.py`](../lot2_3_sphere_trajectory.py) | `python lot2_3_sphere_trajectory.py` | `SEED=0` (politique adaptative π*) | [`trajectoire.csv`](lot2_3_sphere/trajectoire.csv), [`figure.pdf`](lot2_3_sphere/figure.pdf), [`run.log`](lot2_3_sphere/run.log) |
+| Lot 2.4 — déplacement géométrique attendu vs `(slip, guess)`, piste A/B marquées | [`lot2_4_fisher_info_slip_guess.py`](../lot2_4_fisher_info_slip_guess.py) | `python lot2_4_fisher_info_slip_guess.py` | déterministe (aucune simulation, calcul fermé) | [`raw.csv`](lot2_4_fisher_info/raw.csv), [`figure.pdf`](lot2_4_fisher_info/figure.pdf), [`run.log`](lot2_4_fisher_info/run.log) |
+
 ## À venir (plan_action_code.md)
 
 - **Lot 1** — validation de l'approximation Monte Carlo : **fait** (1.1, E1, E2, E3 — voir tableau ci-dessus). Reste seulement 1.5 (figure `|Z|` vs nombre de concepts, cosmétique — E3 couvre déjà l'essentiel du terrain). Recommandation d'ingénierie chiffrée (livrable du lot) : sous `|Z| ≈ 1 400`, calculer l'exact (`pi_star`) ; au-delà, `sample_z` avec `N ≈ 10–30` domine (coût constant, regret déjà < 15 % à N=30 d'après E1). `sample_y` n'est jamais avantageux (même ordre de coût que l'exact, valeur seulement approchée).
-- **Lot 2** — ancrage géométrique (distance de Fisher-Rao, trajectoires, information de Fisher vs `(slip, guess)`).
+- **Lot 2** — ancrage géométrique : **fait** (2.1 distance de Fisher-Rao + longueur d'arc dans `kst_engine.py`, 2.2/2.3/2.4 — voir tableau ci-dessus). L'effet narratif du plan est confirmé : `expected_fisher_rao_step` et `item_information` (Lot 1) classent les 5 concepts piste A dans le MÊME ordre, deux mesures indépendantes qui s'effondrent ensemble quand `guess` augmente — vérification croisée Lot 1/Lot 2.
 - **Lot 3** — robustesse à la mauvaise spécification (découplage vérité/moteur, grille `slip`×`guess`, graphe de prérequis faux, arène miroir IRT, calibration de la confiance).
 - **Lot 4** — A3 sur le domaine calibré piste A (plafond relevé à 150, cf. `note_calibration.md` §6) ; test D1 (hétérogénéité) sur le seul bucket `arithmetic`.
 

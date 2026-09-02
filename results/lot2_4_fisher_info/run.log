@@ -1,0 +1,5 @@
+date (UTC) : 2026-09-02T19:07:06.728246+00:00
+commande   : python lot2_4_fisher_info_slip_guess.py
+commit git : 4d3a71a
+sources    : data\domain.yaml, domains\piste_b.yaml
+aucune graine aleatoire (calcul deterministe, pas de simulation)

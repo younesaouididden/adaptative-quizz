@@ -95,7 +95,7 @@ Limite assumée et documentée : les paramètres IRT (a, b, c) sont **dérivés*
 
 ---
 
-## 5. Lot 1 — validation de l'approximation Monte Carlo (en cours)
+## 5. Lot 1 — validation de l'approximation Monte Carlo (fait)
 
 La présentation d'août posait l'estimateur Monte Carlo comme un compromis biais-variance-temps sans le chiffrer. `kst_engine.information_gain_mc` a maintenant deux modes, comparés à `information_gain_exact` comme référence :
 
@@ -136,7 +136,35 @@ Résultat rassurant : dès N=3, les deux modes retombent quasi sur l'exact (~19-
 
 ---
 
-## 6. Ce qui reste ouvert / non résolu
+## 6. Lot 2 — Ancrage géométrique (fait)
+
+Les chapitres 4-5 du rapport portent sur la géométrie de Fisher-Rao, les géodésiques, le gradient naturel — sans aucun objet géométrique dans les résultats jusqu'ici. Trois figures :
+
+<p align="center">
+  <img src="lot2_2_arc_length_figure.png" alt="Lot 2.2 : longueur d'arc cumulee" width="600">
+</p>
+
+*Figure 7 — distance parcourue sur Δ(Z) (métrique de Fisher-Rao) en fonction du numéro de question, adaptatif vs aléatoire, piste B. L'adaptatif parcourt davantage de distance par question en début de trajectoire, puis plafonne plus tôt (il s'arrête après moins de questions) — exactement la prédiction du plan.*
+
+<p align="center">
+  <img src="lot2_3_sphere_figure.png" alt="Lot 2.3 : trajectoire sur la sphere de Fisher-Rao" width="600">
+</p>
+
+*Figure 8 — trajectoire p₀ → p_T sur l'octant positif d'une sphère de Fisher-Rao (domaine minimal à 3 états, carte racine x=2√p). L'illustration théorique du cours, avec une vraie trajectoire simulée.*
+
+<p align="center">
+  <img src="lot2_4_fisher_info_figure.png" alt="Lot 2.4 : effondrement geometrique vs guess" width="600">
+</p>
+
+*Figure 9 — déplacement géométrique attendu par question en fonction de `guess` (slip=0,10 fixe), avec les 5 concepts piste A (calibrés EM) et piste B marqués à leurs vraies valeurs.*
+
+**Résultat le plus important du lot** : `expected_fisher_rao_step` (nouvelle mesure géométrique) et `item_information` (Lot 1, mesure KL/Wald) classent les 5 concepts piste A dans **exactement le même ordre** (`probability_statistics > algebra > analytic_geometry > geometry > arithmetic`) — deux mesures mathématiquement indépendantes qui s'accordent. Piste B domine largement piste A sur les deux mesures. **La saga du `guess` dégénéré cesse d'être une limite documentée après coup et devient une prédiction quantitative de la théorie, vérifiée sur données réelles** — probablement le résultat le plus solide de tout le PFA pour le rapport.
+
+157 tests passent (15 nouveaux pour ce lot). Résultats bruts : `results/lot2_2_arc_length/`, `results/lot2_3_sphere/`, `results/lot2_4_fisher_info/`.
+
+---
+
+## 7. Ce qui reste ouvert / non résolu
 
 - **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
 - **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
@@ -146,6 +174,6 @@ Résultat rassurant : dès N=3, les deux modes retombent quasi sur l'exact (~19-
 
 ---
 
-## 7. Style de travail établi sur ce projet
+## 8. Style de travail établi sur ce projet
 
 Petits incréments testables, un test pytest par fonction sur fixtures synthétiques (jamais les fichiers réels multi-millions de lignes), fonctions mathématiques commentées avec le numéro de chapitre de la monographie correspondant, commit+push après chaque étape significative avec messages détaillés, documents de passation écrits à chaque décision importante.

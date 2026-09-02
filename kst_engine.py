@@ -186,6 +186,70 @@ def concept_marginals(p: np.ndarray, domain: Domain) -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
+# GEOMETRIE DE FISHER-RAO sur Delta(Z) (chapitres 4-5, Lot 2 du plan)
+# ---------------------------------------------------------------------------
+
+def fisher_rao_distance(p: np.ndarray, q: np.ndarray) -> float:
+    """d(p,q) = 2.arccos( Sum_z sqrt(p(z).q(z)) ), la distance geodesique
+    sur Delta(Z) pour la metrique de Fisher-Rao (chapitres 4-5).
+
+    Vient du plongement "carte racine" x = 2.sqrt(p) : x vit alors sur
+    l'octant positif d'une sphere de rayon 2 (||x||^2 = 4.Sum p(z) = 4), et
+    d(p,q) est exactement 2 fois l'angle entre x_p et x_q -- d'ou la forme
+    fermee, qui ne demande ni integrale ni geodesique explicite.
+
+    Sum_z sqrt(p(z).q(z)) (l'affinite de Bhattacharyya) peut legerement
+    depasser 1 par erreur d'arrondi flottant quand p~=q, ce qui rendrait
+    arccos indefini (NaN) : on clippe a [-1,1], exact partout ailleurs sur
+    le domaine (meme raisonnement que le clip de _binary_entropy).
+
+    d(p,q)=0 ssi p=q ; d(p,q)=pi (maximum) ssi p et q ont des supports
+    disjoints (affinite nulle).
+    """
+    affinity = float(np.sum(np.sqrt(p * q)))
+    return 2.0 * float(np.arccos(np.clip(affinity, -1.0, 1.0)))
+
+
+def cumulative_arc_length(belief_trace: list[np.ndarray]) -> list[float]:
+    """Longueur d'arc cumulee le long d'une trajectoire de croyances
+    (chapitres 4-5, Lot 2.1-2.2) : somme des distances de Fisher-Rao entre
+    pas consecutifs. cumulative_arc_length(trace)[0] == 0.0 (avant toute
+    question), meme longueur que belief_trace.
+    """
+    lengths = [0.0]
+    for i in range(1, len(belief_trace)):
+        lengths.append(lengths[-1] +
+                       fisher_rao_distance(belief_trace[i - 1], belief_trace[i]))
+    return lengths
+
+
+def expected_fisher_rao_step(slip: float, guess: float, prior: float = 0.5) -> float:
+    """Distance de Fisher-Rao moyenne parcourue sur Delta({non-maitrise,
+    maitrise}) apres UNE reponse a une question (slip, guess), a partir
+    d'une croyance `prior` sur la maitrise (chapitres 4-5, Lot 2.4).
+
+    Distinct de item_information (Lot 1, note_calibration.md) : celui-ci
+    mesure l'information au sens de la divergence KL/Wald, celui-la le
+    DEPLACEMENT GEOMETRIQUE reel sur la variete Delta(Z) -- deux angles
+    differents sur le meme phenomene (guess eleve => l'item n'apporte
+    presque rien), qui doivent tous deux s'effondrer quand guess -> 1-slip,
+    ce qui sert de verification croisee entre Lot 1 et Lot 2.
+    """
+    p = np.array([1.0 - prior, prior])            # [P(non-maitrise), P(maitrise)]
+    l_correct = np.array([guess, 1.0 - slip])      # P(correct | non-maitrise/maitrise)
+    l_incorrect = 1.0 - l_correct
+    p_correct = float(np.dot(p, l_correct))
+
+    def posterior(l: np.ndarray) -> np.ndarray:
+        post = p * l
+        return post / post.sum()
+
+    d_correct = fisher_rao_distance(p, posterior(l_correct))
+    d_incorrect = fisher_rao_distance(p, posterior(l_incorrect))
+    return p_correct * d_correct + (1.0 - p_correct) * d_incorrect
+
+
+# ---------------------------------------------------------------------------
 # COUCHE 4 : Gain d'information et selection (chapitres 6-7)
 # ---------------------------------------------------------------------------
 
@@ -470,6 +534,7 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
     p = uniform_prior(domain)
     asked: set[int] = set()
     trace = [entropy(p)]
+    belief_trace = [p.copy()]   # sequence complete des croyances (Lot 2, geometrie)
 
     while True:
         # pi_star calcule aussi le critere d'arret 3 (chapitre 7) : on le
@@ -487,9 +552,11 @@ def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
         p = bayes_update(p, domain, q, correct)
         asked.add(q)
         trace.append(entropy(p))
+        belief_trace.append(p.copy())
 
     z_hat = domain.Z[int(np.argmax(p))]
     return {"n_questions": len(asked), "entropy_trace": trace,
+            "belief_trace": belief_trace,
             "z_hat": z_hat, "correct_diagnosis": z_hat == z_true,
             "confidence": float(p.max()), "belief": p}
 

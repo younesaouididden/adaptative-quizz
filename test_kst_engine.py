@@ -21,7 +21,10 @@ from kst_engine import (
     uniform_prior,
     bayes_update,
     concept_marginals,
+    cumulative_arc_length,
     entropy,
+    expected_fisher_rao_step,
+    fisher_rao_distance,
     information_gain_exact,
     information_gain_mc,
     item_information,
@@ -227,6 +230,103 @@ class TestConceptMarginals:
         p[vide_idx] = 1.0
         marg = concept_marginals(p, toy_domain)
         assert all(v == pytest.approx(0.0) for v in marg.values())
+
+
+# ---------------------------------------------------------------------------
+# Geometrie de Fisher-Rao sur Delta(Z) (chapitres 4-5, Lot 2)
+# ---------------------------------------------------------------------------
+
+class TestFisherRaoDistance:
+
+    def test_distance_a_soi_meme_est_nulle(self, toy_domain):
+        # arccos a une derivee qui explose pres de 1.0 : une affinite a
+        # 1e-8 de 1.0 (arrondi flottant) donne une distance de l'ordre de
+        # sqrt(2e-8) ~ 1e-4, pas 1e-9 -- tolerance dimensionnee en consequence
+        p = uniform_prior(toy_domain)
+        assert fisher_rao_distance(p, p) == pytest.approx(0.0, abs=1e-3)
+
+    def test_symetrique(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        q = np.zeros(toy_domain.n_states)
+        q[0] = 1.0
+        assert fisher_rao_distance(p, q) == pytest.approx(fisher_rao_distance(q, p))
+
+    def test_maximale_pi_pour_supports_disjoints(self):
+        p = np.array([1.0, 0.0, 0.0])
+        q = np.array([0.0, 1.0, 0.0])
+        assert fisher_rao_distance(p, q) == pytest.approx(np.pi)
+
+    def test_bornee_entre_0_et_pi(self, toy_domain):
+        rng = np.random.default_rng(0)
+        for _ in range(20):
+            p = rng.dirichlet(np.ones(toy_domain.n_states))
+            q = rng.dirichlet(np.ones(toy_domain.n_states))
+            d = fisher_rao_distance(p, q)
+            assert 0.0 <= d <= np.pi + 1e-9
+
+    def test_pas_de_nan_quand_p_egal_q_avec_arrondi_flottant(self):
+        """Regression : Sum sqrt(p.q) peut legerement depasser 1.0 par
+        arrondi flottant quand p==q, ce qui rendrait arccos indefini sans
+        le clip [-1,1]."""
+        p = np.array([0.1, 0.2, 0.7])
+        assert not np.isnan(fisher_rao_distance(p, p.copy()))
+
+
+class TestCumulativeArcLength:
+
+    def test_commence_a_zero(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert lengths[0] == 0.0
+
+    def test_meme_longueur_que_belief_trace(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert len(lengths) == len(r["belief_trace"])
+
+    def test_croissant_au_sens_large(self, toy_domain):
+        # somme de distances >= 0 -> jamais decroissant
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert all(b >= a - 1e-9 for a, b in zip(lengths, lengths[1:]))
+
+    def test_correspond_a_la_somme_manuelle(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        trace = r["belief_trace"]
+        lengths = cumulative_arc_length(trace)
+        manual = sum(fisher_rao_distance(trace[i], trace[i + 1])
+                    for i in range(len(trace) - 1))
+        assert lengths[-1] == pytest.approx(manual)
+
+
+class TestExpectedFisherRaoStep:
+
+    def test_positif(self):
+        assert expected_fisher_rao_step(slip=0.10, guess=0.25) > 0.0
+
+    def test_secroule_quand_guess_approche_1_moins_slip(self):
+        """Meme phenomene que item_information (Lot 1) : quand
+        slip+guess -> 1, l'item cesse de separer maitrise/non-maitrise, le
+        deplacement geometrique attendu doit s'effondrer vers 0."""
+        slip = 0.10
+        far = expected_fisher_rao_step(slip=slip, guess=0.25)
+        near = expected_fisher_rao_step(slip=slip, guess=0.89)
+        assert near < far
+        assert near < 0.02
+
+    def test_coherent_avec_item_information_sur_le_classement(self):
+        """Les deux mesures (KL/Wald pour item_information, geometrique ici)
+        doivent classer les memes configurations dans le meme ordre, meme
+        si les unites different -- verification croisee Lot1/Lot2."""
+        configs = [(0.10, 0.25), (0.10, 0.50), (0.10, 0.75)]
+        geo = [expected_fisher_rao_step(slip=s, guess=g) for s, g in configs]
+        kl = [item_information(slip=s, guess=g) for s, g in configs]
+        assert geo == sorted(geo, reverse=True)
+        assert kl == sorted(kl, reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -555,6 +655,21 @@ class TestSimulate:
         z_true = toy_domain.Z[-1]
         r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=5)
         assert r["n_questions"] <= 5
+
+    def test_belief_trace_meme_longueur_que_entropy_trace(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        assert len(r["belief_trace"]) == len(r["entropy_trace"])
+
+    def test_belief_trace_commence_au_prior_uniforme(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        np.testing.assert_allclose(r["belief_trace"][0], uniform_prior(toy_domain))
+
+    def test_belief_trace_dernier_element_egal_belief_final(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        np.testing.assert_allclose(r["belief_trace"][-1], r["belief"])
 
     def test_trace_entropie_commence_a_lentropie_du_prior(self, toy_domain):
         z_true = toy_domain.Z[-1]

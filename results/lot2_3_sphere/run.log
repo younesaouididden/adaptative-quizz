@@ -1,0 +1,7 @@
+date (UTC)  : 2026-09-02T19:06:02.230913+00:00
+commande    : python lot2_3_sphere_trajectory.py
+commit git  : 4d3a71a
+domaine     : synthetique, 2 concepts (a,b), b exige a, |Z|=3
+z_true      : {a,b} (maitrise complete {a,b})
+graine      : seed=0 (politique adaptative pi_star)
+n_questions : 2
