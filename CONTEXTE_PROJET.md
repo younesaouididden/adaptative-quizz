@@ -148,6 +148,32 @@ Aujourd'hui un seul jeu de paramètres génère les réponses **et** est suppos�
 
 Résultats bruts et figures : `results/lot3_2_grille/`, `results/lot3_3_prereq_faux/`, `results/lot3_4_arene_miroir/`, `results/lot3_6_correction/`. 161 tests passent au total (4 nouveaux pour 3.1).
 
+### Lot 4 — Boucler la piste A (branche `lot5-vocabulaire-theorie`, fait)
+
+**A3 sur le domaine calibré** (`lot4_a3_piste_a.py`) — fait. Rejoue le benchmark A3 sur `data/domain.yaml` (5 concepts, `|Z|=18`, `guess` calibré EM 0,50–0,75) au lieu de piste B, plafond de questions relevé à 150 (`note_calibration.md` §6). Banque synthétique : 40 questions/concept (200 au total), toutes partageant le `(slip, guess)` réellement calibré du concept — aucune variation par item inventée, cette donnée n'existe pas pour piste A.
+
+| Politique | Questions (moy.) | Exactitude par concept |
+|---|---|---|
+| **Adaptatif (π*)** | 74,8 ± 23,6 | 92,2 % |
+| **Aléatoire** | 114,8 ± 35,1 | 91,1 % |
+| **CAT-IRT** | 150,0 (plafond) | 60,0 % |
+
+**Dégradation forte confirmée**, exactement la prédiction du Lot 2.4 : ~4× plus de questions que piste B (18,6) pour une précision comparable (92,2 % vs 95,7 %). Prédiction fermée (`questions_needed` par concept, somme sur les 5 valeurs réelles) : 108,5 questions — contre 74,8 mesurées, écart de ~45 % (bien moins précis que l'accord à 3 % obtenu sur piste B). Écart honnête à noter : l'approximation de Wald ignore le partage d'information entre concepts via les prérequis, et cet effet pèse proportionnellement plus lourd sur seulement 5 concepts fortement contraints que sur 7.
+
+**Test D1 (hétérogénéité)** (`lot4_d1_heterogeneite.py`) — fait, résultat **négatif et net**. Isole le bucket `arithmetic` (301 exercices, area Junyi brute, 25 925 992 lignes lues → 17 679 833 retenues via réextraction complète du log brut), le subdivise comme dans la première tentative à 9 concepts (`arithmetic_base`/`fractions_ratios`, même mapping topic, git commit `568dc1d`), et relance l'EM **isolément** sur ce sous-domaine à 2 concepts seul (pas joint avec 7 ou 9 autres concepts comme précédemment). Convergence propre (22 itérations, écart-type < 0,0002 sur 5 redémarrages) :
+
+| Concept | slip | guess |
+|---|---|---|
+| `arithmetic` combiné (piste A, 5 concepts) | 0,1064 | 0,7462 |
+| `arithmetic_base` (ancien, 9 concepts, **fit joint**) | 0,096 | 0,756 |
+| `fractions_ratios` (ancien, 9 concepts, **fit joint**) | 0,141 | 0,685 |
+| **`arithmetic_base` (D1, fit ISOLÉ)** | **0,0949** | **0,7588** |
+| **`fractions_ratios` (D1, fit ISOLÉ)** | **0,1367** | **0,6845** |
+
+**Deux résultats en un.** (1) Le fit isolé retombe presque exactement sur l'ancien fit joint (écarts en 3ᵉ décimale) — élimine une explication alternative possible (interférence de l'estimation conjointe avec 7-9 concepts) : ce n'était pas un artefact de l'ajustement joint. (2) **La subdivision ne fait PAS baisser `guess`** — `arithmetic_base` (0,759) est même *plus élevé* que le bucket combiné (0,746), `fractions_ratios` (0,685) descend un peu mais reste très implausible. **L'hypothèse d'hétérogénéité par granularité n'est pas confirmée** pour ce bucket, avec une preuve chiffrée à l'appui (pas seulement l'absence de preuve du contraire). Cohérent avec §4 point 4 (le jeu complet reste bien identifié malgré un `guess` élevé — la piste probable est ailleurs, non résolue, à documenter comme limite ouverte plutôt qu'à forcer).
+
+`responses_d1.parquet` (193 Mo, régénérable via le script) exclu de git comme les autres artefacts de données bruts (`.gitignore` mis à jour).
+
 ---
 
 ## 3. Artifacts annexes (hors pipeline de production, mais dans le repo)

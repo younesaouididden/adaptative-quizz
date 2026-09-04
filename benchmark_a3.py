@@ -74,10 +74,14 @@ def concept_accuracy(z_hat: frozenset, z_true: frozenset, all_concepts: list[str
     return sum((c in z_hat) == (c in z_true) for c in all_concepts) / len(all_concepts)
 
 
-def run_benchmark(domain: Domain, meta: list[dict]) -> list[dict]:
+def run_benchmark(domain: Domain, meta: list[dict], max_questions: int = 30) -> list[dict]:
     """Rejoue chaque etat z in Z avec les trois politiques (etudiants simules,
     verite terrain BLIM identique pour les trois -- seul l'algorithme differe,
     graine = index de l'etat dans domain.Z, donc deterministe et reproductible).
+
+    max_questions=30 par defaut (piste B). A relever (Lot 4, note_calibration.md
+    §6) pour piste A, ou le guess calibre (0.50-0.75) rend 30 questions
+    structurellement insuffisant -- sinon on mesure le plafond, pas la methode.
 
     Retourne une ligne par (politique, etat) -- c'est le CSV brut du Lot 0,
     pas seulement l'agrege."""
@@ -86,9 +90,9 @@ def run_benchmark(domain: Domain, meta: list[dict]) -> list[dict]:
 
     for seed, z in enumerate(domain.Z):
         results = {
-            "adaptatif": simulate(domain, z, adaptive=True, seed=seed),
-            "aleatoire": simulate(domain, z, adaptive=False, seed=seed),
-            "cat_irt": simulate_irt(domain, meta, z, seed=seed),
+            "adaptatif": simulate(domain, z, adaptive=True, seed=seed, max_questions=max_questions),
+            "aleatoire": simulate(domain, z, adaptive=False, seed=seed, max_questions=max_questions),
+            "cat_irt": simulate_irt(domain, meta, z, seed=seed, max_questions=max_questions),
         }
         for policy, r in results.items():
             records.append({

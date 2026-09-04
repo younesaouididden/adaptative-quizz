@@ -216,16 +216,39 @@ Aujourd'hui un seul jeu de paramètres génère les réponses **et** est suppos�
 
 ---
 
-## 8. Ce qui reste ouvert / non résolu
+## 8. Lot 4 — Boucler la piste A (fait)
 
-- **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
-- **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
-- **L'hypothèse d'hétérogénéité des concepts** (piste A, cause du `guess` dégénéré) n'a jamais été formellement testée (le "D1" du plan de diagnostic original) — juste contournée par la simplification à 5 concepts. Reste une piste si le temps le permet.
-- **Rédaction du rapport scientifique lui-même** — les résultats numériques existent (calibration piste A, benchmark A3) mais rien n'est encore rédigé en dur dans un document de mémoire/rapport.
-- Le benchmark A3 n'a été exécuté que sur piste B (`guess` borné, `slip` fixé à un seul point) — le refaire tourner sur le domaine piste A (5 concepts, calibré empiriquement sur Junyi) donnerait un second point de comparaison ; il faudra un plafond de questions relevé (150, pas 30 — cf. `note_calibration.md` §6), sinon on mesure le plafond et non la méthode. Pas encore fait.
+<p align="center">
+  <img src="lot4_a3_piste_a_figure.png" alt="Lot 4 : A3 sur piste A calibree" width="800">
+</p>
+
+*Figure 15 — benchmark A3 sur le domaine réellement calibré (5 concepts, |Z|=18, guess EM 0,50–0,75), plafond relevé à 150 questions.*
+
+**A3 sur le domaine calibré** : dégradation forte confirmée, exactement la prédiction du Lot 2.4 — l'adaptatif a besoin de **74,8 questions** (contre 18,6 sur piste B, ~4×) pour une précision comparable (92,2 % vs 95,7 %). La prédiction fermée (`questions_needed`, somme par concept) donnait 108,5 — un écart de ~45 % à la mesure, bien moins précis que l'accord à 3 % obtenu sur piste B (l'approximation ignore le partage d'information via les prérequis, un effet plus lourd sur 5 concepts fortement contraints).
+
+**Test D1 (hétérogénéité)** — résultat négatif et net, obtenu en réextrayant et recalibrant isolément le bucket `arithmetic` (301 exercices, 17,7M réponses filtrées depuis les 25,9M logs bruts) subdivisé comme dans la première tentative à 9 concepts :
+
+| Concept | slip | guess |
+|---|---|---|
+| `arithmetic` combiné (piste A actuelle) | 0,106 | 0,746 |
+| `arithmetic_base` (D1, fit isolé) | 0,095 | **0,759** |
+| `fractions_ratios` (D1, fit isolé) | 0,137 | **0,685** |
+
+Le fit isolé retombe presque exactement sur l'ancien fit joint à 9 concepts (élimine l'hypothèse d'une interférence de l'estimation conjointe), mais **la subdivision ne fait pas baisser `guess`** — `arithmetic_base` est même plus élevé que le bucket combiné. **L'hypothèse d'hétérogénéité par granularité n'est pas confirmée** pour ce bucket, avec une preuve chiffrée à l'appui plutôt qu'une absence de preuve. La vraie explication reste ouverte — à documenter comme limite honnête, pas à forcer.
+
+Résultats bruts : `results/lot4_a3_piste_a/`, `results/lot4_d1_heterogeneite/`.
 
 ---
 
-## 9. Style de travail établi sur ce projet
+## 9. Ce qui reste ouvert / non résolu
+
+- **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
+- **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
+- **La cause réelle du `guess` élevé en piste A reste ouverte.** D1 (Lot 4) a testé et **écarté** l'hétérogénéité par granularité comme explication (subdiviser `arithmetic` ne fait pas baisser `guess`) — mais n'a pas identifié la vraie cause. Piste non résolue si le temps le permet.
+- **Rédaction du rapport scientifique lui-même** — tous les résultats numériques existent maintenant (calibration piste A, benchmark A3 sur les deux pistes, Lots 1-4 complets) mais rien n'est encore rédigé en dur dans un document de mémoire/rapport final.
+
+---
+
+## 10. Style de travail établi sur ce projet
 
 Petits incréments testables, un test pytest par fonction sur fixtures synthétiques (jamais les fichiers réels multi-millions de lignes), fonctions mathématiques commentées avec le numéro de chapitre de la monographie correspondant, commit+push après chaque étape significative avec messages détaillés, documents de passation écrits à chaque décision importante.

@@ -1,0 +1,14 @@
+date (UTC)   : 2026-09-04T19:16:42.426314+00:00
+commande     : python lot4_d1_heterogeneite.py
+commit git   : 16e2f6a
+exercices    : 301 (area arithmetic, junyi_Exercise_table.csv)
+reponses lues/retenues : 25925992/17679833
+graine EM    : seed=0, 5 redemarrages independants
+convergence  : True
+
+Comparaison (le point de D1) :
+  arithmetic combine (piste A, 5 concepts)      : slip=0.1064 guess=0.7462
+  arithmetic_base (9 concepts, joint, ancien)   : slip=0.096  guess=0.756
+  fractions_ratios (9 concepts, joint, ancien)  : slip=0.141  guess=0.685
+  arithmetic_base (D1, ISOLE)                   : slip=0.0949 guess=0.7588
+  fractions_ratios (D1, ISOLE)                  : slip=0.1367 guess=0.6845

@@ -1,0 +1,8 @@
+date (UTC)         : 2026-09-04T19:12:12.349637+00:00
+commande           : python lot4_a3_piste_a.py
+commit git         : 16e2f6a
+domaine            : data\domain.yaml (piste A, calibre EM)
+questions/concept  : 40 (synthetiques, slip/guess reels partages)
+plafond questions  : 150 (cf. note_calibration.md §6)
+graines            : seed = index de l'etat dans domain.Z, 0..17
+prediction fermee  : 108.5 questions (adaptatif, somme par concept de log(19)/item_information)
