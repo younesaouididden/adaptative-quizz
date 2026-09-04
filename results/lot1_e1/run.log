@@ -1,0 +1,8 @@
+date (UTC)       : 2026-09-02T18:41:34.936846+00:00
+commande         : python lot1_e1_fidelite_politique.py
+commit git       : 3bc2224
+domaine          : domains\piste_b.yaml
+graine racine    : MASTER_SEED=0 (choix des 20 etats + trajectoires)
+graines MC       : np.random.SeedSequence([point_id, mode_idx, n, rep]), deterministe par (point, mode, N, replication)
+points de croyance : 438 (issus de 20 trajectoires)
+lignes brutes    : 52560 (438 points x 2 modes x 6 N x 10 reps)

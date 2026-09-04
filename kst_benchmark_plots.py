@@ -48,7 +48,7 @@ def fig_before_after():
     w = 0.32
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    b1 = ax.bar(x - w/2, adapt_vals, w, label="adaptatif (gain d'information)",
+    b1 = ax.bar(x - w/2, adapt_vals, w, label="adaptatif (π*, gain d'information)",
                color="#2E86AB")
     b2 = ax.bar(x + w/2, rand_vals, w, label="aleatoire",
                color="#C0C0C0")
@@ -82,11 +82,12 @@ def fig_entropy_trace():
 
     fig, ax = plt.subplots(figsize=(7, 5))
     colors = {"adaptatif": "#2E86AB", "aleatoire": "#C0C0C0"}
+    plot_labels = {"adaptatif": "adaptatif (π*)", "aleatoire": "aleatoire"}
     for label, adaptive in (("adaptatif", True), ("aleatoire", False)):
         r = simulate(dom, z_true, adaptive=adaptive, seed=0)
         trace = r["entropy_trace"]
         ax.plot(range(len(trace)), trace, marker="o", markersize=3,
-               label=f"{label} ({r['n_questions']} questions)",
+               label=f"{plot_labels[label]} ({r['n_questions']} questions)",
                color=colors[label], linewidth=2)
 
     ax.axhline(0, color="black", linewidth=0.5)

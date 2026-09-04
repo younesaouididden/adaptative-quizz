@@ -1,0 +1,7 @@
+date (UTC)        : 2026-09-02T19:32:03.614596+00:00
+commande          : python lot3_3_prereq_faux.py
+commit git        : 302c34e
+domaine           : domains\piste_b.yaml
+n_etudiants       : 400 (15% hors Z)
+etats invalides possibles : 78
+graines           : MASTER_SEED=0 pour le tirage des etats ; seed=1000000+i (valides) / 2000000+i (invalides) pour simulate()

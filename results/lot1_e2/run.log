@@ -1,0 +1,7 @@
+date (UTC)    : 2026-09-02T18:48:49.616645+00:00
+commande      : python lot1_e2_cout_en_aval.py
+commit git    : d82a9f6
+domaine       : domains\piste_b.yaml
+graines       : reference exacte -- seed = index de l'etat (0..49). MC -- np.random.SeedSequence([z_seed, mode_idx, n, rep]), deterministe.
+replications  : 5 par (etat, mode, N)
+lignes brutes : 3000 (50 etats x 2 modes x 6 N x 5 reps)

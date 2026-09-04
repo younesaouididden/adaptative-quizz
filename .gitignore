@@ -7,3 +7,4 @@ package.json
 data/raw/
 data/responses.parquet
 data/diagnostics/responses_first_attempt.parquet
+results/**/*.parquet

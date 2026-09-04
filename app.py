@@ -24,7 +24,7 @@ from kst_engine import (
     bayes_update,
     concept_marginals,
     entropy,
-    select_next,
+    pi_star,
     should_stop,
     uniform_prior,
 )
@@ -47,7 +47,7 @@ def init_state(domain):
 
 
 def pick_next(domain):
-    q, ig = select_next(st.session_state.p, domain, st.session_state.asked)
+    q, ig = pi_star(st.session_state.p, domain, st.session_state.asked)
     if q is None or should_stop(st.session_state.p, domain, st.session_state.asked, ig=ig):
         st.session_state.stage = "results"
         st.session_state.current_q = None

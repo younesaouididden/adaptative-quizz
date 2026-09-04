@@ -1,0 +1,18 @@
+schema_version: 1
+domain: junyi_arithmetic_d1
+description: 'Sous-domaine Lot 4/D1 : bucket arithmetic (piste A) subdivise comme
+  piste B, calibre isolement.'
+concepts:
+- id: arithmetic_base
+  label: Arithmetique de base
+  calibrated: true
+  slip: 0.0949
+  guess: 0.7588
+- id: fractions_ratios
+  label: Fractions et ratios
+  calibrated: true
+  slip: 0.1367
+  guess: 0.6845
+prerequisites:
+- - arithmetic_base
+  - fractions_ratios

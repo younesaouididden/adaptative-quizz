@@ -1,0 +1,6 @@
+date (UTC)   : 2026-09-02T19:33:45.942093+00:00
+commande     : python lot3_4_arene_miroir.py
+commit git   : 302c34e
+domaine      : domains\piste_b.yaml
+n_etudiants  : 200
+graines      : MASTER_SEED=0 pour theta~N(0,1) ; seed=i (0..199) pour chaque etudiant, meme graine pour les deux politiques (comparaison appariee)

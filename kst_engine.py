@@ -7,6 +7,26 @@ Implemente les couches 1, 2 et 4 du PFA :
   4. Controle     : selection par maximisation du gain d'information
 
 Aucune dependance hors numpy.
+
+Correspondance theorie (monographie) <-> code (Lot 5, plan_action_code.md) --
+a tenir a jour si l'un des deux cote change :
+
+  Theorie                                          Code
+  ------------------------------------------------  -----------------------------
+  p_t in Delta(Z), etat de croyance                 p : np.ndarray (vecteur sur Z)
+  Transition bayesienne, eq. (1)                    bayes_update
+  pi*(p) = argmax_a IG(a;p), politique optimale      pi_star
+  IG(a;p) = E_y[D_KL(p^y_a || p)]                    information_gain_exact
+  epsilon-lissage                                    lissage symetrique en log-espace
+                                                      (bayes_update, EPS)
+  Action pedagogique a in A                          question de la banque (Question)
+  Probabilite d'emission P(y|a,z)                    modele BLIM (slip, guess)
+
+Les deux dernieres lignes ne sont PAS renommees dans le code : "action a" et
+"question" designent le meme objet, mais "question" reste plus lisible en
+Python qu'une lettre seule -- cf. Question/Concept, deja separes (voir
+docstrings des deux classes). Idem pour p_t : le parametre s'appelle deja `p`
+partout, ce qui correspond directement a la notation.
 """
 
 from __future__ import annotations
@@ -166,6 +186,70 @@ def concept_marginals(p: np.ndarray, domain: Domain) -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
+# GEOMETRIE DE FISHER-RAO sur Delta(Z) (chapitres 4-5, Lot 2 du plan)
+# ---------------------------------------------------------------------------
+
+def fisher_rao_distance(p: np.ndarray, q: np.ndarray) -> float:
+    """d(p,q) = 2.arccos( Sum_z sqrt(p(z).q(z)) ), la distance geodesique
+    sur Delta(Z) pour la metrique de Fisher-Rao (chapitres 4-5).
+
+    Vient du plongement "carte racine" x = 2.sqrt(p) : x vit alors sur
+    l'octant positif d'une sphere de rayon 2 (||x||^2 = 4.Sum p(z) = 4), et
+    d(p,q) est exactement 2 fois l'angle entre x_p et x_q -- d'ou la forme
+    fermee, qui ne demande ni integrale ni geodesique explicite.
+
+    Sum_z sqrt(p(z).q(z)) (l'affinite de Bhattacharyya) peut legerement
+    depasser 1 par erreur d'arrondi flottant quand p~=q, ce qui rendrait
+    arccos indefini (NaN) : on clippe a [-1,1], exact partout ailleurs sur
+    le domaine (meme raisonnement que le clip de _binary_entropy).
+
+    d(p,q)=0 ssi p=q ; d(p,q)=pi (maximum) ssi p et q ont des supports
+    disjoints (affinite nulle).
+    """
+    affinity = float(np.sum(np.sqrt(p * q)))
+    return 2.0 * float(np.arccos(np.clip(affinity, -1.0, 1.0)))
+
+
+def cumulative_arc_length(belief_trace: list[np.ndarray]) -> list[float]:
+    """Longueur d'arc cumulee le long d'une trajectoire de croyances
+    (chapitres 4-5, Lot 2.1-2.2) : somme des distances de Fisher-Rao entre
+    pas consecutifs. cumulative_arc_length(trace)[0] == 0.0 (avant toute
+    question), meme longueur que belief_trace.
+    """
+    lengths = [0.0]
+    for i in range(1, len(belief_trace)):
+        lengths.append(lengths[-1] +
+                       fisher_rao_distance(belief_trace[i - 1], belief_trace[i]))
+    return lengths
+
+
+def expected_fisher_rao_step(slip: float, guess: float, prior: float = 0.5) -> float:
+    """Distance de Fisher-Rao moyenne parcourue sur Delta({non-maitrise,
+    maitrise}) apres UNE reponse a une question (slip, guess), a partir
+    d'une croyance `prior` sur la maitrise (chapitres 4-5, Lot 2.4).
+
+    Distinct de item_information (Lot 1, note_calibration.md) : celui-ci
+    mesure l'information au sens de la divergence KL/Wald, celui-la le
+    DEPLACEMENT GEOMETRIQUE reel sur la variete Delta(Z) -- deux angles
+    differents sur le meme phenomene (guess eleve => l'item n'apporte
+    presque rien), qui doivent tous deux s'effondrer quand guess -> 1-slip,
+    ce qui sert de verification croisee entre Lot 1 et Lot 2.
+    """
+    p = np.array([1.0 - prior, prior])            # [P(non-maitrise), P(maitrise)]
+    l_correct = np.array([guess, 1.0 - slip])      # P(correct | non-maitrise/maitrise)
+    l_incorrect = 1.0 - l_correct
+    p_correct = float(np.dot(p, l_correct))
+
+    def posterior(l: np.ndarray) -> np.ndarray:
+        post = p * l
+        return post / post.sum()
+
+    d_correct = fisher_rao_distance(p, posterior(l_correct))
+    d_incorrect = fisher_rao_distance(p, posterior(l_incorrect))
+    return p_correct * d_correct + (1.0 - p_correct) * d_incorrect
+
+
+# ---------------------------------------------------------------------------
 # COUCHE 4 : Gain d'information et selection (chapitres 6-7)
 # ---------------------------------------------------------------------------
 
@@ -202,34 +286,114 @@ def information_gain_exact(p: np.ndarray, domain: Domain, q: int) -> float:
     return ig
 
 
+def _binary_entropy(x: np.ndarray | float) -> np.ndarray | float:
+    """H_2(x) = -x.log2(x) - (1-x).log2(1-x), l'entropie de Bernoulli(x).
+
+    Clippe a EPS des bords : lim x->0,1 de x.log2(x) est 0, pas indefini,
+    donc clipper est exact a EPS pres, pas une approximation biaisee (meme
+    raisonnement que le filtre p>EPS de entropy())."""
+    x = np.clip(x, EPS, 1.0 - EPS)
+    return -(x * np.log2(x) + (1.0 - x) * np.log2(1.0 - x))
+
+
 def information_gain_mc(p: np.ndarray, domain: Domain, q: int,
                         n_samples: int = 200,
+                        mode: str = "sample_y",
                         rng: np.random.Generator | None = None) -> float:
-    """Estimateur Monte Carlo de IG via E_y[ KL(posterior || p) ] (chapitres 4-7).
+    """Estimateur Monte Carlo de IG(a;p) (chapitres 4-7, Lot 1 du plan
+    d'action -- cf. plan_action_code.md pour le preambule methodologique
+    complet sur les deux modes).
 
-    Ici il est inutile (|Y| = 2), mais on le garde pour verifier empiriquement
-    la convergence vers la valeur exacte -- et il devient indispensable des
-    que les reponses sont a choix multiples ou que |Z| est grand.
+    mode="sample_y" (estimateur original, diapo 7 de la presentation d'aout)
+    Echantillonne les REPONSES y ~ P(.|a,p), via E_y[ KL(posterior || p) ].
+    Pour un item binaire |Y|=2, il n'existe que DEUX posteriors possibles
+    quel que soit n_samples : on tire un seul compte binomial et on pondere
+    les deux posteriors (deja calcules une fois chacun) au lieu de boucler
+    bayes_update n_samples fois -- optimisation pure, meme quantite estimee.
+    Cout final O(|Z|), independant de n_samples -- **exactement le meme
+    ordre que information_gain_exact**, pour une valeur seulement APPROCHEE.
+    C'est la demonstration silencieuse de l'argument du preambule du Lot 1 :
+    echantillonner y pour un item binaire est strictement pire que calculer
+    l'exact (information_gain_exact le fait deja, au meme cout, sans bruit).
+    Garde pour comparaison empirique (E1-E3) et parce que l'approche devient
+    necessaire des que les reponses sont a choix multiples (|Y|>2) ou que
+    l'action est un bloc de plusieurs questions (|Y|=2^k) -- non implemente
+    ici, cf. Lot 1. N'attaque PAS le goulot reel, qui est |Z|.
 
-    Piege (chapitre 4-5) : lisser SEULEMENT le denominateur du KL,
-    log(P / (Q+eps)), biaise l'estimateur et peut le rendre negatif. On
-    lisse donc les deux distributions avec la meme formule
-    p <- (p+eps)/(1+|Z|*eps) avant de calculer le KL.
+    mode="sample_z" (attaque le goulot |Z|)
+    Echantillonne les ETATS z_i ~ p(z) (PAS les reponses), et utilise la
+    decomposition duale de l'information mutuelle
+        I(Z;Y|a) = H(Y|a) - E_z[ H(Y|a,z) ]
+    au lieu de H(Y|a) - E_y[ H(Z|a,y) ]. H(Y|a,z) est l'entropie binaire de
+    L[z,q] (P(correct|z,q), une lecture directe -- deterministe une fois z
+    fixe, aucun bayes_update). H(Y|a) est estimee par le meme echantillon
+    (plug-in sur la moyenne empirique de L[z_i,q]), pas calculee exactement
+    sur Z : cout O(n_samples), INDEPENDANT de |Z|. C'est cette variante qui
+    repond a la question du Lot 1 -- "en dessous de quel |Z| calculer
+    l'exact, au-dela utiliser MC avec quel N" -- puisque c'est la seule a ne
+    jamais parcourir Z en entier. Biais de plug-in sur le terme H(Y|a)
+    (fonction non-lineaire de la moyenne empirique) qui s'attenue avec N :
+    exactement le compromis biais-variance-temps que E1 doit chiffrer.
+
+    PIEGE decouvert en E2 (pas en E1) : a n_samples=1, l'estimateur est
+    DEGENERE, pas juste bruite. p_correct_hat (un seul point) est alors
+    IDENTIQUE a l'unique element de p_correct_i utilise pour le terme
+    conditionnel -- H(Y|a) et E_z[H(Y|a,z)] sont donc calcules sur exactement
+    la meme donnee, et leur difference vaut 0.0 EXACTEMENT, pour toute
+    question, a chaque appel (pas juste en esperance). pi_hat(mode="sample_z",
+    n_samples=1) retombe alors systematiquement sur le premier candidat
+    balaye (argmax sur des ex-aequo a 0), et should_stop s'arrete
+    immediatement (ig=0 < min_ig) -- simulate_mc(n_samples=1, mode="sample_z")
+    ne pose donc JAMAIS aucune question. E1 (qui mesure une decision isolee
+    au milieu d'une trajectoire deja avancee) ne revele pas cette pathologie
+    aussi clairement que E2 (qui rejoue la boucle complete depuis le prior) --
+    exactement pourquoi les deux experiences sont necessaires. N=1 est a
+    proscrire avec ce mode ; N>=3 suffit a le rendre non-degenere.
+
+    Piege commun aux deux modes (chapitre 4-5) : lisser SEULEMENT le
+    denominateur du KL, log(P / (Q+eps)), biaise l'estimateur et peut le
+    rendre negatif. On lisse donc les deux distributions avec la meme
+    formule p <- (p+eps)/(1+|Z|*eps) avant de calculer le KL (mode sample_y
+    uniquement -- sample_z n'a pas de KL sur Delta(Z), donc pas ce piege).
     """
     rng = rng or np.random.default_rng()
+
+    if mode == "sample_z":
+        idx = rng.choice(len(p), size=n_samples, p=p)
+        p_correct_i = domain.L[idx, q]                    # P(correct|z_i,q), lecture directe
+        p_correct_hat = float(p_correct_i.mean())
+        h_y = float(_binary_entropy(p_correct_hat))
+        h_y_given_z = float(np.mean(_binary_entropy(p_correct_i)))
+        return h_y - h_y_given_z
+
+    if mode != "sample_y":
+        raise ValueError(f"information_gain_mc: mode={mode!r} inconnu "
+                        "(attendu 'sample_y' ou 'sample_z')")
+
     p_correct = float(np.dot(p, domain.L[:, q]))
-    ys = rng.random(n_samples) < p_correct
     n_z = len(p)
 
     def smooth(dist: np.ndarray) -> np.ndarray:
         return (dist + EPS) / (1.0 + n_z * EPS)
 
     p_s = smooth(p)
+    # y est binaire (|Y|=2) : il n'existe que DEUX posteriors possibles,
+    # quel que soit n_samples. Plutot que boucler n_samples fois sur
+    # bayes_update (identique a chaque tirage correct=True, ou a chaque
+    # tirage correct=False), on tire un seul compte binomial et on
+    # pondere les deux posteriors deja calcules -- resultat identique a
+    # la boucle naive (meme formule, juste factorisee), mais O(1) appels a
+    # bayes_update au lieu de O(n_samples). Optimisation pure, aucun
+    # changement de la quantite estimee (les tests de convergence
+    # utilisent des tolerances, pas des valeurs figees).
+    n_correct = int(rng.binomial(n_samples, p_correct))
     total = 0.0
-    for y in ys:
-        post = bayes_update(p, domain, q, bool(y))
+    for correct, count in ((True, n_correct), (False, n_samples - n_correct)):
+        if count == 0:
+            continue
+        post = bayes_update(p, domain, q, correct)
         post_s = smooth(post)
-        total += float(np.sum(post_s * np.log2(post_s / p_s)))
+        total += count * float(np.sum(post_s * np.log2(post_s / p_s)))
     return total / n_samples
 
 
@@ -283,9 +447,15 @@ def questions_needed(slip: float, guess: float, n_concepts: int,
     return n_concepts * log_odds / item_information(slip, guess)
 
 
-def select_next(p: np.ndarray, domain: Domain,
-                asked: set[int]) -> tuple[int, float]:
-    """Politique gloutonne : argmax du gain d'information sur les questions non posees.
+def pi_star(p: np.ndarray, domain: Domain,
+           asked: set[int]) -> tuple[int, float]:
+    """Politique optimale exacte π*(p) = argmax_a IG(a;p) (chapitres 6-7) :
+    argmax du gain d'information sur les questions non posees.
+
+    C'est la politique que la theorie declare intractable en general et que
+    cette implementation calcule EXACTEMENT (pas une approximation) --
+    d'ou la valeur du Lot 1 du plan (validation de l'estimateur Monte Carlo
+    contre cette meme reference exacte, cf. plan_action_code.md).
 
     asked contient des indices de QUESTIONS (pas de concepts) : plusieurs
     questions du meme concept restent eligibles tant qu'elles n'ont pas
@@ -303,6 +473,35 @@ def select_next(p: np.ndarray, domain: Domain,
     return best, best_ig
 
 
+def pi_hat(p: np.ndarray, domain: Domain, asked: set[int],
+          n_samples: int = 30, mode: str = "sample_z",
+          rng: np.random.Generator | None = None) -> tuple[int, float]:
+    """Politique approximee π̂_N(p) = argmax_a IG_MC(a;p) (Lot 1,
+    plan_action_code.md) : meme structure gloutonne que pi_star, mais le
+    gain d'information de chaque candidat est estime par
+    information_gain_mc (mode, n_samples) au lieu d'etre calcule
+    exactement -- c'est la politique que E1/E2 comparent a pi_star.
+
+    Un seul rng est partage entre tous les candidats d'un meme appel (pas
+    un rng par candidat) : c'est ce qui rend la comparaison entre candidats
+    a l'interieur d'un meme appel coherente d'un tirage a l'autre.
+
+    Retourne (indice de la question choisie, son gain d'information ESTIME
+    -- pas le gain exact de cette question : comparer information_gain_exact
+    de la question retournee a celle de pi_star donne le regret d'E1, pas
+    cette valeur-ci).
+    """
+    rng = rng or np.random.default_rng()
+    best, best_ig = None, -np.inf
+    for q in range(domain.n_questions):
+        if q in asked:
+            continue
+        ig = information_gain_mc(p, domain, q, n_samples=n_samples, mode=mode, rng=rng)
+        if ig > best_ig:
+            best, best_ig = q, ig
+    return best, best_ig
+
+
 def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
                 max_questions: int = 30,
                 confidence: float = 0.85,
@@ -311,7 +510,7 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
     """Trois criteres d'arret (chapitre 7), le premier qui se declenche gagne.
 
     ig : gain d'information de la meilleure question restante, si deja
-    calcule par select_next (c'est le cas dans simulate). Sinon il est
+    calcule par pi_star (c'est le cas dans simulate). Sinon il est
     recalcule ici -- pratique pour appeler should_stop seul (tests), mais
     coute O(|A|.|Z|) : ne pas l'omettre dans une boucle chaude.
     """
@@ -320,7 +519,7 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
     if p.max() >= confidence:                       # un etat domine
         return True
     if ig is None:
-        _, ig = select_next(p, domain, asked)        # plus rien a apprendre
+        _, ig = pi_star(p, domain, asked)             # plus rien a apprendre
     return ig < min_ig
 
 
@@ -329,28 +528,86 @@ def should_stop(p: np.ndarray, domain: Domain, asked: set[int],
 # ---------------------------------------------------------------------------
 
 def simulate(domain: Domain, z_true: frozenset, adaptive: bool = True,
-             seed: int = 0, max_questions: int = 30):
-    """Fait passer le quiz a un etudiant simule dont on connait l'etat reel."""
+             seed: int = 0, max_questions: int = 30,
+             verite_slip: float | None = None,
+             verite_guess: float | None = None):
+    """Fait passer le quiz a un etudiant simule dont on connait l'etat reel.
+
+    verite_slip / verite_guess (Lot 3.1, plan_action_code.md -- decouplage
+    verite/moteur) : si fournis, la reponse de l'etudiant est generee avec
+    CES parametres au lieu de question.slip/question.guess, alors que la
+    mise a jour bayesienne continue d'utiliser domain.L (ce que le moteur
+    CROIT, fige a la construction du Domain). None (defaut) : comportement
+    inchange d'avant ce lot, verite et moteur coincident.
+
+    C'est le seul changement de signature demande par le Lot 3 -- pas une
+    reecriture du simulateur, cf. plan_action_code.md 3.1.
+    """
+    rng = np.random.default_rng(seed)
+    p = uniform_prior(domain)
+    asked: set[int] = set()
+    trace = [entropy(p)]
+    belief_trace = [p.copy()]   # sequence complete des croyances (Lot 2, geometrie)
+
+    while True:
+        # pi_star calcule aussi le critere d'arret 3 (chapitre 7) : on le
+        # passe a should_stop plutot que le laisser le recalculer, ce qui
+        # evite de payer deux fois O(|A|.|Z|) par question posee.
+        q_best, ig = pi_star(p, domain, asked)
+        if should_stop(p, domain, asked, max_questions=max_questions, ig=ig):
+            break
+        q = q_best if adaptive else int(rng.choice(
+            [i for i in range(domain.n_questions) if i not in asked]))
+        question = domain.questions[q]
+        # l'etudiant repond selon la VERITE (peut differer de ce que le
+        # moteur croit -- domain.L, utilise par bayes_update ci-dessous)
+        slip = question.slip if verite_slip is None else verite_slip
+        guess = question.guess if verite_guess is None else verite_guess
+        true_p = (1 - slip) if question.concept in z_true else guess
+        correct = bool(rng.random() < true_p)
+        p = bayes_update(p, domain, q, correct)   # <- toujours domain.L (le moteur)
+        asked.add(q)
+        trace.append(entropy(p))
+        belief_trace.append(p.copy())
+
+    z_hat = domain.Z[int(np.argmax(p))]
+    return {"n_questions": len(asked), "entropy_trace": trace,
+            "belief_trace": belief_trace,
+            "z_hat": z_hat, "correct_diagnosis": z_hat == z_true,
+            "confidence": float(p.max()), "belief": p}
+
+
+def simulate_mc(domain: Domain, z_true: frozenset, n_samples: int,
+                mode: str = "sample_z", seed: int = 0,
+                max_questions: int = 30) -> dict:
+    """Variante de simulate() pilotee par la politique APPROXIMEE pi_hat
+    (Lot 1, plan_action_code.md, experience E2) au lieu de pi_star -- meme
+    structure, meme sortie, seule la ligne de selection change.
+
+    Selection ET critere d'arret (3e critere de should_stop, gain d'info
+    residuel) utilisent tous deux l'estimation MC, pas l'exact : c'est
+    l'usage realiste de l'approximation en production (on ne paierait pas
+    le cout de pi_star juste pour le critere d'arret si le but est
+    justement d'eviter ce cout).
+
+    Mesure le cout en aval de l'approximation : comparer n_questions et
+    correct_diagnosis a simulate(domain, z_true, adaptive=True, seed=seed)
+    (= pi_star, N infini) pour le meme z_true et la meme graine.
+    """
     rng = np.random.default_rng(seed)
     p = uniform_prior(domain)
     asked: set[int] = set()
     trace = [entropy(p)]
 
     while True:
-        # select_next calcule aussi le critere d'arret 3 (chapitre 7) : on le
-        # passe a should_stop plutot que le laisser le recalculer, ce qui
-        # evite de payer deux fois O(|A|.|Z|) par question posee.
-        q_best, ig = select_next(p, domain, asked)
+        q_best, ig = pi_hat(p, domain, asked, n_samples=n_samples, mode=mode, rng=rng)
         if should_stop(p, domain, asked, max_questions=max_questions, ig=ig):
             break
-        q = q_best if adaptive else int(rng.choice(
-            [i for i in range(domain.n_questions) if i not in asked]))
-        question = domain.questions[q]
-        # l'etudiant repond selon le vrai BLIM
+        question = domain.questions[q_best]
         true_p = (1 - question.slip) if question.concept in z_true else question.guess
         correct = bool(rng.random() < true_p)
-        p = bayes_update(p, domain, q, correct)
-        asked.add(q)
+        p = bayes_update(p, domain, q_best, correct)
+        asked.add(q_best)
         trace.append(entropy(p))
 
     z_hat = domain.Z[int(np.argmax(p))]

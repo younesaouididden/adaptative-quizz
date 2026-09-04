@@ -20,7 +20,7 @@ Implémente les 4 couches de la théorie :
 - **Combinatoire** : `build_knowledge_space` construit `Z` (l'espace des états de connaissance valides) à partir d'un graphe de prérequis entre concepts — fermeture transitive puis sous-ensembles clos vers le bas.
 - **Probabilité (BLIM)** : `Domain`/`Concept`/`Question`, chaque question a son propre `slip` (erreur d'inattention) et `guess` (réponse au hasard), contrainte `slip+guess<1`. **Concept et Question sont volontairement séparés** (refactor fait tôt) : plusieurs questions par concept, ce qui donne un vrai choix à la sélection gloutonne.
 - **Mise à jour bayésienne** : `bayes_update` sur `Δ(Z)`, en log-espace, avec lissage symétrique (prior et vraisemblance) pour éviter que `p(z)` s'écrase à 0 de façon irréversible.
-- **Contrôle** : `select_next` (argmax du gain d'information exact), `should_stop` (trois critères : plafond de questions, confiance ≥ seuil, gain d'info résiduel négligeable).
+- **Contrôle** : `pi_star` — π*(p) = argmax_a IG(a;p), la politique optimale exacte (argmax du gain d'information) —, `should_stop` (trois critères : plafond de questions, confiance ≥ seuil, gain d'info résiduel négligeable).
 
 Le cas d'or de la monographie (0,500 → 0,818) est vérifié par test. Le moteur n'a **aucune dépendance hors numpy** — un choix de conception délibérément maintenu (les chargeurs YAML, matplotlib, etc. vivent dans des modules séparés).
 
@@ -95,16 +95,160 @@ Limite assumée et documentée : les paramètres IRT (a, b, c) sont **dérivés*
 
 ---
 
-## 5. Ce qui reste ouvert / non résolu
+## 5. Lot 1 — validation de l'approximation Monte Carlo (fait)
 
-- **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
-- **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
-- **L'hypothèse d'hétérogénéité des concepts** (piste A, cause du `guess` dégénéré) n'a jamais été formellement testée (le "D1" du plan de diagnostic original) — juste contournée par la simplification à 5 concepts. Reste une piste si le temps le permet.
-- **Rédaction du rapport scientifique lui-même** — les résultats numériques existent (calibration piste A, benchmark A3) mais rien n'est encore rédigé en dur dans un document de mémoire/rapport.
-- Le benchmark A3 n'a été exécuté que sur piste B (`guess` borné, `slip` fixé à un seul point) — le refaire tourner sur le domaine piste A (5 concepts, calibré empiriquement sur Junyi) donnerait un second point de comparaison ; il faudra un plafond de questions relevé (150, pas 30 — cf. `note_calibration.md` §6), sinon on mesure le plafond et non la méthode. Pas encore fait.
+La présentation d'août posait l'estimateur Monte Carlo comme un compromis biais-variance-temps sans le chiffrer. `kst_engine.information_gain_mc` a maintenant deux modes, comparés à `information_gain_exact` comme référence :
+
+- **`sample_y`** (existant) : échantillonne les réponses. Un item étant binaire, il n'existe que deux postérieurs possibles quel que soit `N` — optimisé pour ne les calculer qu'une fois chacun. Coût final `O(|Z|)`, le même ordre que l'exact, pour une valeur seulement approchée : la démonstration concrète que échantillonner `y` pour un item binaire est strictement pire que calculer l'exact. N'attaque pas le goulot réel (`|Z|`).
+- **`sample_z`** (nouveau) : échantillonne les **états** plutôt que les réponses, via la décomposition duale de l'information mutuelle. Coût `O(N)`, indépendant de `|Z|` — la variante qui attaque le vrai goulot.
+
+**E1 (fidélité de la politique)**, sur 438 croyances issues de **vraies trajectoires** adaptatives (piste B, pas des priors uniformes artificiels) :
+
+<p align="center">
+  <img src="lot1_e1_figure.png" alt="Lot 1 E1 : fidelite de la politique approximee" width="700">
+</p>
+
+*Figure 4 — taux d'accord et regret en gain d'information, π̂_N vs π* (politique exacte), pour N ∈ {1,3,5,10,30,100}. Table brute : `results/lot1_e1/raw.csv` (52 560 lignes).*
+
+**Résultat à retenir** : le taux d'accord est trompeur — même à N=100, π̂_N ne retombe sur l'argmax exact que ~30 % du temps, mais la question choisie reste à 97-99 % du gain d'information optimal. Le **regret** est la métrique honnête, exactement comme l'annonçait le plan. `sample_z` a besoin d'environ 3 à 5× plus d'échantillons que `sample_y` pour un regret équivalent — attendu, puisque `sample_y` profite gratuitement du calcul exact de `p_correct` (déjà payé), alors que `sample_z` ne touche jamais `Z` en entier. Sur `|Z|=50` (piste B), calculer l'exact reste le meilleur choix des deux côtés — `sample_z` ne devient intéressant qu'au-delà d'un seuil de `|Z|` pas encore mesuré (rôle d'E3, à venir).
+
+**E2 (coût en aval)** — rejoue le benchmark complet avec π̂_N au lieu de π* :
+
+<p align="center">
+  <img src="lot1_e2_figure.png" alt="Lot 1 E2 : cout en aval" width="700">
+</p>
+
+*Figure 5 — nombre de questions et exactitude finale, π̂_N vs π* (ligne pointillée), sur le benchmark complet (50 états × 5 réplications).*
+
+Résultat rassurant : dès N=3, les deux modes retombent quasi sur l'exact (~19-20 questions vs 18,6 ; ~96 % d'exactitude vs 95,7 %) — le faible taux d'accord mesuré par E1 ne se traduit **pas** en coût élevé sur la trajectoire complète. **Sauf un piège net et net à N=1 pour `sample_z`** (visible sur la figure, chute à 0 question / 47 % d'exactitude) : à N=1, l'estimateur est **dégénéré**, pas juste bruité — `H(Y|a)` et `E_z[H(Y|a,z)]` sont calculés sur exactement le même point, leur différence vaut 0.0 exactement, ce qui fait arrêter le quiz avant la moindre question. E1 ne le révélait pas (il regarde des décisions isolées à mi-trajectoire) ; E2 le révèle (il rejoue depuis le prior uniforme) — la raison d'être des deux expériences.
+
+**E3 (coût de calcul selon `|Z|`)** — domaines synthétiques sans prérequis (`|Z|` de 32 à 8192), temps d'une décision complète :
+
+<p align="center">
+  <img src="lot1_e3_figure.png" alt="Lot 1 E3 : cout de calcul selon |Z|" width="600">
+</p>
+
+*Figure 6 — temps par décision (échelle log-log), exact vs Monte Carlo. `sample_y` suit l'exact (même ordre `O(|Z|)`) ; `sample_z` reste quasi constant.*
+
+**Recommandation d'ingénierie chiffrée (livrable du Lot 1)** : le croisement des courbes mesurées place le seuil autour de `|Z| ≈ 1 400`. **Sous ce seuil, calculer l'exact ; au-delà, `sample_z` avec `N ≈ 10-30`** (E1 : regret déjà < 15 % à N=30). Piste A (`|Z|=18`) et piste B (`|Z|=50`) sont très en dessous — l'approximation MC n'a d'intérêt que pour des domaines nettement plus riches que ceux utilisés dans ce PFA. Seuil mesuré sur une machine donnée, ordre de grandeur plutôt que constante universelle.
+
+**Reste du Lot 1** : 1.5 (figure `|Z|` vs nombre de concepts pour les domaines réels + synthétiques — cosmétique, E3 couvre déjà l'essentiel).
 
 ---
 
-## 6. Style de travail établi sur ce projet
+## 6. Lot 2 — Ancrage géométrique (fait)
+
+Les chapitres 4-5 du rapport portent sur la géométrie de Fisher-Rao, les géodésiques, le gradient naturel — sans aucun objet géométrique dans les résultats jusqu'ici. Trois figures :
+
+<p align="center">
+  <img src="lot2_2_arc_length_figure.png" alt="Lot 2.2 : longueur d'arc cumulee" width="600">
+</p>
+
+*Figure 7 — distance parcourue sur Δ(Z) (métrique de Fisher-Rao) en fonction du numéro de question, adaptatif vs aléatoire, piste B. L'adaptatif parcourt davantage de distance par question en début de trajectoire, puis plafonne plus tôt (il s'arrête après moins de questions) — exactement la prédiction du plan.*
+
+<p align="center">
+  <img src="lot2_3_sphere_figure.png" alt="Lot 2.3 : trajectoire sur la sphere de Fisher-Rao" width="600">
+</p>
+
+*Figure 8 — trajectoire p₀ → p_T sur l'octant positif d'une sphère de Fisher-Rao (domaine minimal à 3 états, carte racine x=2√p). L'illustration théorique du cours, avec une vraie trajectoire simulée.*
+
+<p align="center">
+  <img src="lot2_4_fisher_info_figure.png" alt="Lot 2.4 : effondrement geometrique vs guess" width="600">
+</p>
+
+*Figure 9 — déplacement géométrique attendu par question en fonction de `guess` (slip=0,10 fixe), avec les 5 concepts piste A (calibrés EM) et piste B marqués à leurs vraies valeurs.*
+
+**Résultat le plus important du lot** : `expected_fisher_rao_step` (nouvelle mesure géométrique) et `item_information` (Lot 1, mesure KL/Wald) classent les 5 concepts piste A dans **exactement le même ordre** (`probability_statistics > algebra > analytic_geometry > geometry > arithmetic`) — deux mesures mathématiquement indépendantes qui s'accordent. Piste B domine largement piste A sur les deux mesures. **La saga du `guess` dégénéré cesse d'être une limite documentée après coup et devient une prédiction quantitative de la théorie, vérifiée sur données réelles** — probablement le résultat le plus solide de tout le PFA pour le rapport.
+
+157 tests passent (15 nouveaux pour ce lot). Résultats bruts : `results/lot2_2_arc_length/`, `results/lot2_3_sphere/`, `results/lot2_4_fisher_info/`.
+
+---
+
+## 7. Lot 3 — Robustesse à la mauvaise spécification (fait)
+
+Aujourd'hui un seul jeu de paramètres génère les réponses **et** est supposé par le moteur — l'objection la plus facile à formuler pour un jury. Six points traités.
+
+**3.1 (découplage)** : `simulate()` et `simulate_irt()` acceptent désormais `verite_slip`/`verite_guess` optionnels — la réponse simulée peut différer de ce que le moteur croit (`domain.L`, utilisé pour la mise à jour bayésienne). Changement de signature minimal, pas une réécriture.
+
+**3.2 — grille de bruit** : moteur figé à piste B, vérité balayée sur 16 cellules (`slip×guess`), 3 politiques, 48 000 runs.
+
+<p align="center">
+  <img src="lot3_2_degradation_figure.png" alt="Lot 3.2 : degradation sous mauvaise specification" width="800">
+</p>
+
+*Figure 10 — exactitude par concept selon `(slip, guess)` réels, moteur figé à piste B (cadre noir = cellule bien spécifiée). Dégradation nette et asymétrique quand `guess` réel dépasse ce que le moteur croit.*
+
+**3.3 — graphe de prérequis faux** : 15 % des étudiants simulés ont un état vrai hors `Z` (structurellement irreprésentable). Distance de Hamming : 0,315 concept mal diagnostiqué en moyenne pour les états valides, 1,467 pour les invalides — dégradation nette mais **gracieuse**, pas un effondrement.
+
+<p align="center">
+  <img src="lot3_3_prereq_faux_figure.png" alt="Lot 3.3 : distance de Hamming" width="800">
+</p>
+
+*Figure 11 — distribution de la distance de Hamming et coût en questions, états valides vs hors Z.*
+
+**3.4 — arène miroir** : vérité générée par le 3PL continu (le modèle DE l'IRT) au lieu du BLIM.
+
+<p align="center">
+  <img src="lot3_4_arene_miroir_figure.png" alt="Lot 3.4 : arene miroir" width="800">
+</p>
+
+*Figure 12 — sur sa propre vérité générative, l'IRT gagne (85,0 % vs 73,1 %) — l'exact miroir du benchmark A3 (vérité BLIM : KST 95,7 % vs IRT 66,3 %). Chaque modèle domine sur sa propre vérité ; la vraie question — laquelle décrit Junyi — renvoie à la piste A.*
+
+**3.5 — calibration de la confiance** :
+
+<p align="center">
+  <img src="lot3_5_calibration_figure.png" alt="Lot 3.5 : diagramme de fiabilite" width="600">
+</p>
+
+*Figure 13 — diagramme de fiabilité, politique KST adaptative. Bien spécifié : suit la diagonale (ECE=0,018). Régime piste A (`guess=0,70`) : confiance ~90 % pour une exactitude réelle de ~10-38 % (ECE=0,467) — mesuré, pas seulement affirmé.*
+
+**3.6 — correction, résultat plus nuancé que prévu** : même grille avec un moteur volontairement prudent (`slip=0,20`/`guess=0,40` supposés).
+
+<p align="center">
+  <img src="lot3_6_calibration_figure.png" alt="Lot 3.6 : calibration apres correction" width="600">
+</p>
+
+*Figure 14 — après correction : régime piste A améliore son ECE (0,467→0,271, ~42 %) au prix de plus de questions (23,5→27,7). Mais la cellule bien spécifiée se DÉGRADE (ECE 0,018→0,195) — le moteur devient sous-confiant là où il n'en avait pas besoin.*
+
+**La prudence n'est pas un correctif gratuit : c'est un compromis robustesse/précision explicite**, qui améliore le pire cas au prix du cas normal. Résultat plus honnête et plus intéressant pour le rapport qu'un simple « ça marche » — cohérent avec l'esprit de `note_calibration.md` (jamais forcer un résultat à correspondre à l'attente).
+
+161 tests passent (4 nouveaux pour 3.1). Résultats bruts : `results/lot3_2_grille/`, `results/lot3_3_prereq_faux/`, `results/lot3_4_arene_miroir/`, `results/lot3_6_correction/`.
+
+---
+
+## 8. Lot 4 — Boucler la piste A (fait)
+
+<p align="center">
+  <img src="lot4_a3_piste_a_figure.png" alt="Lot 4 : A3 sur piste A calibree" width="800">
+</p>
+
+*Figure 15 — benchmark A3 sur le domaine réellement calibré (5 concepts, |Z|=18, guess EM 0,50–0,75), plafond relevé à 150 questions.*
+
+**A3 sur le domaine calibré** : dégradation forte confirmée, exactement la prédiction du Lot 2.4 — l'adaptatif a besoin de **74,8 questions** (contre 18,6 sur piste B, ~4×) pour une précision comparable (92,2 % vs 95,7 %). La prédiction fermée (`questions_needed`, somme par concept) donnait 108,5 — un écart de ~45 % à la mesure, bien moins précis que l'accord à 3 % obtenu sur piste B (l'approximation ignore le partage d'information via les prérequis, un effet plus lourd sur 5 concepts fortement contraints).
+
+**Test D1 (hétérogénéité)** — résultat négatif et net, obtenu en réextrayant et recalibrant isolément le bucket `arithmetic` (301 exercices, 17,7M réponses filtrées depuis les 25,9M logs bruts) subdivisé comme dans la première tentative à 9 concepts :
+
+| Concept | slip | guess |
+|---|---|---|
+| `arithmetic` combiné (piste A actuelle) | 0,106 | 0,746 |
+| `arithmetic_base` (D1, fit isolé) | 0,095 | **0,759** |
+| `fractions_ratios` (D1, fit isolé) | 0,137 | **0,685** |
+
+Le fit isolé retombe presque exactement sur l'ancien fit joint à 9 concepts (élimine l'hypothèse d'une interférence de l'estimation conjointe), mais **la subdivision ne fait pas baisser `guess`** — `arithmetic_base` est même plus élevé que le bucket combiné. **L'hypothèse d'hétérogénéité par granularité n'est pas confirmée** pour ce bucket, avec une preuve chiffrée à l'appui plutôt qu'une absence de preuve. La vraie explication reste ouverte — à documenter comme limite honnête, pas à forcer.
+
+Résultats bruts : `results/lot4_a3_piste_a/`, `results/lot4_d1_heterogeneite/`.
+
+---
+
+## 9. Ce qui reste ouvert / non résolu
+
+- **Accès collègue à l'app Streamlit déployée** — action à faire par l'utilisateur (Share → e-mail, ou collaborateur GitHub), pas encore fait.
+- **Redéploiement de l'app Streamlit** suite au changement de domaine (piste A → piste B) — pas encore fait.
+- **La cause réelle du `guess` élevé en piste A reste ouverte.** D1 (Lot 4) a testé et **écarté** l'hétérogénéité par granularité comme explication (subdiviser `arithmetic` ne fait pas baisser `guess`) — mais n'a pas identifié la vraie cause. Piste non résolue si le temps le permet.
+- **Rédaction du rapport scientifique lui-même** — tous les résultats numériques existent maintenant (calibration piste A, benchmark A3 sur les deux pistes, Lots 1-4 complets) mais rien n'est encore rédigé en dur dans un document de mémoire/rapport final.
+
+---
+
+## 10. Style de travail établi sur ce projet
 
 Petits incréments testables, un test pytest par fonction sur fixtures synthétiques (jamais les fichiers réels multi-millions de lignes), fonctions mathématiques commentées avec le numéro de chapitre de la monographie correspondant, commit+push après chaque étape significative avec messages détaillés, documents de passation écrits à chaque décision importante.

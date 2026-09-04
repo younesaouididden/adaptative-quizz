@@ -1,0 +1,14 @@
+mode,n_samples,n_questions_moyen,n_questions_std,exactitude_par_concept,n_observations
+exact (pi_star),inf,18.62,0.00,0.957,50
+sample_y,1,21.07,5.46,0.961,250
+sample_y,3,20.32,5.72,0.960,250
+sample_y,5,19.62,5.29,0.967,250
+sample_y,10,19.73,5.72,0.966,250
+sample_y,30,19.40,5.33,0.963,250
+sample_y,100,19.55,5.66,0.959,250
+sample_z,1,0.00,0.00,0.471,250
+sample_z,3,20.19,3.91,0.959,250
+sample_z,5,19.64,4.43,0.959,250
+sample_z,10,19.44,4.29,0.958,250
+sample_z,30,20.24,5.47,0.951,250
+sample_z,100,19.78,5.86,0.966,250

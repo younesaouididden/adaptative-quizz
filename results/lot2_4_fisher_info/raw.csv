@@ -1,0 +1,13 @@
+source,concept,slip,guess,expected_fisher_rao_step,item_information_nats
+piste_a,algebra,0.1863,0.5173,0.302988,0.208222
+piste_a,analytic_geometry,0.1094,0.6545,0.242633,0.172118
+piste_a,arithmetic,0.1064,0.7462,0.149729,0.077356
+piste_a,geometry,0.1205,0.7026,0.179966,0.099771
+piste_a,probability_statistics,0.1525,0.4969,0.362310,0.302835
+piste_b,arithmetic_base,0.1,0.25,0.715399,1.071147
+piste_b,fractions_ratios,0.1,0.25,0.715399,1.071147
+piste_b,algebra_linear,0.1,0.25,0.715399,1.071147
+piste_b,algebra_advanced,0.1,0.25,0.715399,1.071147
+piste_b,geometry,0.1,0.25,0.715399,1.071147
+piste_b,analytic_geometry,0.1,0.25,0.715399,1.071147
+piste_b,probability_statistics,0.1,0.25,0.715399,1.071147

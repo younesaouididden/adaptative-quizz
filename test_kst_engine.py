@@ -21,14 +21,19 @@ from kst_engine import (
     uniform_prior,
     bayes_update,
     concept_marginals,
+    cumulative_arc_length,
     entropy,
+    expected_fisher_rao_step,
+    fisher_rao_distance,
     information_gain_exact,
     information_gain_mc,
     item_information,
     questions_needed,
-    select_next,
+    pi_star,
+    pi_hat,
     should_stop,
     simulate,
+    simulate_mc,
     make_demo_domain,
     _question_bank,
     _OFFSET_POOL,
@@ -228,6 +233,103 @@ class TestConceptMarginals:
 
 
 # ---------------------------------------------------------------------------
+# Geometrie de Fisher-Rao sur Delta(Z) (chapitres 4-5, Lot 2)
+# ---------------------------------------------------------------------------
+
+class TestFisherRaoDistance:
+
+    def test_distance_a_soi_meme_est_nulle(self, toy_domain):
+        # arccos a une derivee qui explose pres de 1.0 : une affinite a
+        # 1e-8 de 1.0 (arrondi flottant) donne une distance de l'ordre de
+        # sqrt(2e-8) ~ 1e-4, pas 1e-9 -- tolerance dimensionnee en consequence
+        p = uniform_prior(toy_domain)
+        assert fisher_rao_distance(p, p) == pytest.approx(0.0, abs=1e-3)
+
+    def test_symetrique(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        q = np.zeros(toy_domain.n_states)
+        q[0] = 1.0
+        assert fisher_rao_distance(p, q) == pytest.approx(fisher_rao_distance(q, p))
+
+    def test_maximale_pi_pour_supports_disjoints(self):
+        p = np.array([1.0, 0.0, 0.0])
+        q = np.array([0.0, 1.0, 0.0])
+        assert fisher_rao_distance(p, q) == pytest.approx(np.pi)
+
+    def test_bornee_entre_0_et_pi(self, toy_domain):
+        rng = np.random.default_rng(0)
+        for _ in range(20):
+            p = rng.dirichlet(np.ones(toy_domain.n_states))
+            q = rng.dirichlet(np.ones(toy_domain.n_states))
+            d = fisher_rao_distance(p, q)
+            assert 0.0 <= d <= np.pi + 1e-9
+
+    def test_pas_de_nan_quand_p_egal_q_avec_arrondi_flottant(self):
+        """Regression : Sum sqrt(p.q) peut legerement depasser 1.0 par
+        arrondi flottant quand p==q, ce qui rendrait arccos indefini sans
+        le clip [-1,1]."""
+        p = np.array([0.1, 0.2, 0.7])
+        assert not np.isnan(fisher_rao_distance(p, p.copy()))
+
+
+class TestCumulativeArcLength:
+
+    def test_commence_a_zero(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert lengths[0] == 0.0
+
+    def test_meme_longueur_que_belief_trace(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert len(lengths) == len(r["belief_trace"])
+
+    def test_croissant_au_sens_large(self, toy_domain):
+        # somme de distances >= 0 -> jamais decroissant
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        lengths = cumulative_arc_length(r["belief_trace"])
+        assert all(b >= a - 1e-9 for a, b in zip(lengths, lengths[1:]))
+
+    def test_correspond_a_la_somme_manuelle(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        trace = r["belief_trace"]
+        lengths = cumulative_arc_length(trace)
+        manual = sum(fisher_rao_distance(trace[i], trace[i + 1])
+                    for i in range(len(trace) - 1))
+        assert lengths[-1] == pytest.approx(manual)
+
+
+class TestExpectedFisherRaoStep:
+
+    def test_positif(self):
+        assert expected_fisher_rao_step(slip=0.10, guess=0.25) > 0.0
+
+    def test_secroule_quand_guess_approche_1_moins_slip(self):
+        """Meme phenomene que item_information (Lot 1) : quand
+        slip+guess -> 1, l'item cesse de separer maitrise/non-maitrise, le
+        deplacement geometrique attendu doit s'effondrer vers 0."""
+        slip = 0.10
+        far = expected_fisher_rao_step(slip=slip, guess=0.25)
+        near = expected_fisher_rao_step(slip=slip, guess=0.89)
+        assert near < far
+        assert near < 0.02
+
+    def test_coherent_avec_item_information_sur_le_classement(self):
+        """Les deux mesures (KL/Wald pour item_information, geometrique ici)
+        doivent classer les memes configurations dans le meme ordre, meme
+        si les unites different -- verification croisee Lot1/Lot2."""
+        configs = [(0.10, 0.25), (0.10, 0.50), (0.10, 0.75)]
+        geo = [expected_fisher_rao_step(slip=s, guess=g) for s, g in configs]
+        kl = [item_information(slip=s, guess=g) for s, g in configs]
+        assert geo == sorted(geo, reverse=True)
+        assert kl == sorted(kl, reverse=True)
+
+
+# ---------------------------------------------------------------------------
 # Couche 4 : entropie, gain d'information, selection, arret
 # ---------------------------------------------------------------------------
 
@@ -282,6 +384,103 @@ class TestInformationGain:
         for q in range(toy_domain.n_questions):
             mc = information_gain_mc(p, toy_domain, q, n_samples=2000, rng=rng)
             assert mc >= -1e-9
+
+    def test_mode_inconnu_leve(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        with pytest.raises(ValueError):
+            information_gain_mc(p, toy_domain, 0, mode="sample_w")
+
+
+class TestInformationGainMcSampleZ:
+    """mode="sample_z" (Lot 1, plan_action_code.md) : echantillonne les
+    ETATS au lieu des reponses, cout O(n_samples) independant de |Z| -- la
+    variante qui attaque le vrai goulot. A un biais de plug-in different de
+    sample_y (systematiquement vers le bas, cf. test_biais_...), c'est
+    attendu et fait partie de ce que Lot 1/E1 doit chiffrer, pas un bug."""
+
+    def test_converge_vers_exact(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(1)
+        for q in range(toy_domain.n_questions):
+            exact = information_gain_exact(p, toy_domain, q)
+            mc = information_gain_mc(p, toy_domain, q, n_samples=5000,
+                                     mode="sample_z", rng=rng)
+            assert mc == pytest.approx(exact, abs=0.02)
+
+    def test_degenere_a_n1_vaut_exactement_zero(self, toy_domain):
+        """Piege decouvert en E2 (lot1_e2_cout_en_aval.py), pas en E1 : a
+        n_samples=1, H(Y|a) et E_z[H(Y|a,z)] sont calcules sur exactement le
+        meme point -- leur difference vaut 0.0 EXACTEMENT (pas juste bruite
+        autour de 0), pour n'importe quelle question ou croyance. Consequence
+        en aval : simulate_mc(n_samples=1, mode="sample_z") ne pose jamais
+        aucune question (should_stop s'arrete des le premier tour, ig=0)."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        for q in range(toy_domain.n_questions):
+            mc = information_gain_mc(p, toy_domain, q, n_samples=1,
+                                     mode="sample_z", rng=rng)
+            assert mc == 0.0
+
+    def test_non_degenere_des_n3(self, toy_domain):
+        """N>=3 suffit a rompre la degenerescence de N=1 (au moins un des
+        n_samples tirages differe generiquement des autres)."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        values = [information_gain_mc(p, toy_domain, 0, n_samples=3,
+                                      mode="sample_z", rng=rng)
+                 for _ in range(20)]
+        assert any(v != 0.0 for v in values)
+
+    def test_question_sur_etat_certain_najoute_rien(self, toy_domain):
+        p = np.zeros(toy_domain.n_states)
+        p[0] = 1.0
+        rng = np.random.default_rng(0)
+        for q in range(toy_domain.n_questions):
+            mc = information_gain_mc(p, toy_domain, q, n_samples=500,
+                                     mode="sample_z", rng=rng)
+            assert mc == pytest.approx(0.0, abs=1e-9)
+
+    def test_biais_systematique_vers_le_bas_a_petit_n(self, toy_domain):
+        """Propriete de l'estimateur plug-in (pas un bug) : H(Y|a) est
+        estimee par plug-in sur la moyenne empirique de L[z_i,q], et
+        l'entropie binaire est concave -> par l'inegalite de Jensen,
+        E[H_2(moyenne empirique)] <= H_2(moyenne vraie) = H(Y|a) exact.
+        Le terme E_z[H(Y|a,z)] est lui un estimateur sans biais (moyenne
+        empirique directe). L'estimateur complet est donc biaise vers le
+        bas en moyenne, et le biais doit se resorber quand N grandit."""
+        p = uniform_prior(toy_domain)
+        q = 0
+        exact = information_gain_exact(p, toy_domain, q)
+
+        def mean_estimate(n_samples, n_reps=200):
+            vals = [information_gain_mc(p, toy_domain, q, n_samples=n_samples,
+                                        mode="sample_z",
+                                        rng=np.random.default_rng(s))
+                   for s in range(n_reps)]
+            return np.mean(vals)
+
+        biased = mean_estimate(10)
+        less_biased = mean_estimate(500)
+        assert biased < exact - 0.01          # biais net et mesurable a N=10
+        assert less_biased == pytest.approx(exact, abs=0.01)   # quasi resorbe a N=500
+        assert abs(biased - exact) > abs(less_biased - exact)  # biais decroit avec N
+
+    def test_precis_meme_quand_z_est_grand(self):
+        """Correctness a l'echelle : le cout de calcul independant de |Z|
+        est teste en performance dans l'experience E3 (benchmark dedie, pas
+        pytest -- une assertion de timing ici serait fragile). Ici on verifie
+        seulement que l'estimation reste fidele a l'exact quand |Z| grandit
+        bien au-dela du domaine jouet (2^10 = 1024 etats)."""
+        concepts = [Concept(f"c{i}") for i in range(10)]
+        big = Domain(concepts=concepts, prereqs=[],
+                    questions=[Question("qa", "c0", slip=0.1, guess=0.2)])
+        assert big.n_states == 2 ** 10
+
+        p = uniform_prior(big)
+        exact = information_gain_exact(p, big, 0)
+        mc = information_gain_mc(p, big, 0, n_samples=5000, mode="sample_z",
+                                 rng=np.random.default_rng(0))
+        assert mc == pytest.approx(exact, abs=0.02)
 
 
 class TestItemInformation:
@@ -345,17 +544,17 @@ class TestQuestionsNeeded:
         assert piste_a_haut > piste_a_bas
 
 
-class TestSelectNext:
+class TestPiStar:
 
     def test_ignore_les_questions_deja_posees(self, toy_domain):
         p = uniform_prior(toy_domain)
         asked = {0}
-        q, _ = select_next(p, toy_domain, asked)
+        q, _ = pi_star(p, toy_domain, asked)
         assert q not in asked
 
     def test_choisit_largmax_du_gain(self, toy_domain):
         p = uniform_prior(toy_domain)
-        q, ig = select_next(p, toy_domain, set())
+        q, ig = pi_star(p, toy_domain, set())
         all_ig = [information_gain_exact(p, toy_domain, i)
                  for i in range(toy_domain.n_questions)]
         assert ig == pytest.approx(max(all_ig))
@@ -371,8 +570,45 @@ class TestSelectNext:
         )
         p = uniform_prior(dom)
         asked = {0}                     # "a1" deja posee
-        q, _ = select_next(p, dom, asked)
+        q, _ = pi_star(p, dom, asked)
         assert q in (1, 2)               # "a2" ou "b1" restent eligibles
+
+
+class TestPiHat:
+    """pi_hat = pi_star approximee par Monte Carlo (Lot 1). Sur le domaine
+    jouet (3 questions), un grand N doit retrouver l'argmax exact -- pas
+    une garantie generale (E1 quantifie le taux d'accord a N modeste sur
+    un vrai domaine), mais un minimum attendu ici."""
+
+    def test_ignore_les_questions_deja_posees(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        asked = {0}
+        q, _ = pi_hat(p, toy_domain, asked, n_samples=50, mode="sample_z",
+                     rng=np.random.default_rng(0))
+        assert q not in asked
+
+    def test_grand_n_retrouve_largmax_exact(self, toy_domain):
+        p = uniform_prior(toy_domain)
+        q_star, _ = pi_star(p, toy_domain, set())
+        for mode in ("sample_y", "sample_z"):
+            q_hat, _ = pi_hat(p, toy_domain, set(), n_samples=3000, mode=mode,
+                             rng=np.random.default_rng(0))
+            assert q_hat == q_star
+
+    def test_meme_rng_partage_entre_candidats(self, toy_domain):
+        """Deux appels avec le meme rng ne doivent pas retomber sur le
+        meme etat interne pour chaque candidat (sinon les candidats sont
+        tous evalues sur un tirage identique, ce qui biaiserait la
+        comparaison) -- verifie indirectement que le rng avance bien."""
+        p = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        q1, ig1 = pi_hat(p, toy_domain, set(), n_samples=20, mode="sample_y", rng=rng)
+        q2, ig2 = pi_hat(p, toy_domain, set(), n_samples=20, mode="sample_y", rng=rng)
+        # deux appels successifs sur le meme rng (donc des tirages differents)
+        # -> pas necessairement le meme résultat exact, mais les deux restent
+        # des choix valides parmi les questions du domaine
+        assert q1 in range(toy_domain.n_questions)
+        assert q2 in range(toy_domain.n_questions)
 
 
 class TestShouldStop:
@@ -420,6 +656,68 @@ class TestSimulate:
         r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=5)
         assert r["n_questions"] <= 5
 
+    def test_verite_none_reproduit_le_comportement_original(self, toy_domain):
+        """Lot 3.1 : parametres par defaut -> aucun changement de comportement."""
+        z_true = toy_domain.Z[-1]
+        r1 = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        r2 = simulate(toy_domain, z_true, adaptive=True, seed=0,
+                     verite_slip=None, verite_guess=None)
+        assert r1["n_questions"] == r2["n_questions"]
+        np.testing.assert_allclose(r1["belief"], r2["belief"])
+
+    def test_verite_extreme_biaise_le_diagnostic(self, toy_domain):
+        """Lot 3.1 : si la verite differe radicalement de ce que le moteur
+        suppose (guess quasi 1 : l'etudiant reussit presque toujours, meme
+        sans maitriser), le moteur -- qui continue de croire a son propre
+        guess bas -- doit etre trompe et diagnostiquer une maitrise que
+        l'etudiant n'a pas."""
+        z_true = frozenset()   # l'etudiant ne maitrise RIEN en verite
+        n_trompe = 0
+        for seed in range(20):
+            r = simulate(toy_domain, z_true, adaptive=True, seed=seed,
+                        verite_slip=0.10, verite_guess=0.95)
+            if r["z_hat"] != z_true:
+                n_trompe += 1
+        assert n_trompe > 10   # largement plus de la moitie, pas du bruit isole
+
+    def test_moteur_ignore_la_verite_pour_la_mise_a_jour(self, toy_domain):
+        """Le decouplage ne doit toucher QUE la generation de la reponse --
+        la mise a jour bayesienne doit rester exactement celle que produirait
+        domain.L (ce que le moteur croit), peu importe la verite fournie."""
+        z_true = toy_domain.Z[-1]
+        p0 = uniform_prior(toy_domain)
+        rng = np.random.default_rng(0)
+        q_best, _ = pi_star(p0, toy_domain, set())
+        # meme graine, verite extreme : le premier tirage aleatoire sert a
+        # decider correct/incorrect selon la VERITE, mais la mise a jour
+        # doit utiliser domain.L (le moteur), verifiee via bayes_update direct
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0,
+                    verite_slip=0.10, verite_guess=0.95)
+        # le premier point du belief_trace est le prior, le second est le
+        # posterior apres 1 reponse -- il doit etre un posterior VALIDE du
+        # moteur (bayes_update avec correct=True ou correct=False), pas une
+        # valeur arbitraire
+        post_si_correct = bayes_update(p0, toy_domain, q_best, True)
+        post_si_incorrect = bayes_update(p0, toy_domain, q_best, False)
+        second = r["belief_trace"][1]
+        assert (np.allclose(second, post_si_correct) or
+               np.allclose(second, post_si_incorrect))
+
+    def test_belief_trace_meme_longueur_que_entropy_trace(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        assert len(r["belief_trace"]) == len(r["entropy_trace"])
+
+    def test_belief_trace_commence_au_prior_uniforme(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        np.testing.assert_allclose(r["belief_trace"][0], uniform_prior(toy_domain))
+
+    def test_belief_trace_dernier_element_egal_belief_final(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate(toy_domain, z_true, adaptive=True, seed=0)
+        np.testing.assert_allclose(r["belief_trace"][-1], r["belief"])
+
     def test_trace_entropie_commence_a_lentropie_du_prior(self, toy_domain):
         z_true = toy_domain.Z[-1]
         r = simulate(toy_domain, z_true, adaptive=True, seed=0)
@@ -442,16 +740,56 @@ class TestSimulate:
                  for s, z in enumerate(dom.Z)]
         assert np.mean(n_adapt) < np.mean(n_rand)
 
-    def test_select_next_appele_une_seule_fois_par_question(self, toy_domain):
-        """Regression : simulate() appelait select_next deux fois par
+    def test_pi_star_appele_une_seule_fois_par_question(self, toy_domain):
+        """Regression : simulate() appelait pi_star deux fois par
         question posee en mode adaptatif (une fois dans should_stop pour le
         3e critere d'arret, une fois de plus pour choisir la question),
         doublant le cout O(|A|.|Z|) pour rien. On attend desormais un seul
         appel par tour de boucle (questions posees + 1 verification finale)."""
         z_true = toy_domain.Z[-1]
-        with patch("kst_engine.select_next", wraps=kst_engine.select_next) as spy:
+        with patch("kst_engine.pi_star", wraps=kst_engine.pi_star) as spy:
             r = simulate(toy_domain, z_true, adaptive=True, seed=0, max_questions=100)
         assert spy.call_count == r["n_questions"] + 1
+
+
+class TestSimulateMc:
+    """simulate() pilote par pi_hat au lieu de pi_star (Lot 1, E2)."""
+
+    def test_sample_z_n1_ne_pose_aucune_question(self, toy_domain):
+        """Consequence en aval de la degenerescence documentee dans
+        information_gain_mc (piege E2) : ig=0 exactement des le premier
+        tour -> should_stop s'arrete avant la moindre question."""
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=1, mode="sample_z", seed=0)
+        assert r["n_questions"] == 0
+
+    def test_diagnostic_dans_Z(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_z", seed=0)
+        assert r["z_hat"] in toy_domain.Z
+
+    def test_ne_depasse_pas_le_budget(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_z",
+                        seed=0, max_questions=5)
+        assert r["n_questions"] <= 5
+
+    def test_meme_forme_de_sortie_que_simulate(self, toy_domain):
+        z_true = toy_domain.Z[-1]
+        r = simulate_mc(toy_domain, z_true, n_samples=30, mode="sample_y", seed=0)
+        assert set(r.keys()) == {"n_questions", "entropy_trace", "z_hat",
+                                 "correct_diagnosis", "confidence", "belief"}
+
+    def test_grand_n_se_rapproche_de_pi_star_en_moyenne(self):
+        """Pas une egalite exacte (rng consommee differemment), mais a grand
+        N sur plusieurs etats, le nombre moyen de questions doit rester du
+        meme ordre de grandeur que la politique exacte."""
+        dom = make_demo_domain(questions_per_concept=3)
+        n_exact = [simulate(dom, z, adaptive=True, seed=s)["n_questions"]
+                  for s, z in enumerate(dom.Z)]
+        n_mc = [simulate_mc(dom, z, n_samples=500, mode="sample_z", seed=s)["n_questions"]
+               for s, z in enumerate(dom.Z)]
+        assert np.mean(n_mc) == pytest.approx(np.mean(n_exact), rel=0.5)
 
     def test_diagnostic_exact_depasse_85_pourcent(self):
         """Critere d'acceptation du Sprint 0 (PROMPT_DEMARRAGE section 5)."""

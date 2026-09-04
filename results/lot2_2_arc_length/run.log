@@ -1,0 +1,5 @@
+date (UTC) : 2026-09-02T19:04:47.015265+00:00
+commande   : python lot2_2_arc_length.py
+commit git : 4d3a71a
+domaine    : domains\piste_b.yaml
+graines    : seed = index de l'etat dans domain.Z, 0..49 (deterministe, 50 etats), meme graine pour adaptatif et aleatoire (comparaison appariee)
