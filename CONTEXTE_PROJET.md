@@ -195,6 +195,11 @@ Résultats bruts et figures : `results/lot3_2_grille/`, `results/lot3_3_prereq_f
 
 **Si l'utilisateur revient sur la qualité de la calibration** : le prochain pas naturel serait de tester l'hétérogénéité directement (D1 du plan original, jamais exécuté formellement) plutôt que de relancer un énième round d'exploration sur l'identifiabilité (déjà tranché, cf. point 3).
 
+6. **D1 exécuté (Lot 4, §2)** : hétérogénéité de granularité écartée — subdiviser `arithmetic` ne fait pas baisser `guess`.
+7. **D2 exécuté (`PROMPT_D2_HYPOTHESE_Z.md`, D2.1, résultats `results/d2_1_signature_temporelle/`)** : hypothèse `z` fixe (apprentissage intra-fenêtre 2012-2015) testée directement sur les timestamps réels, sans EM. Chez les 41 246 couples (étudiant, concept) à taux de réussite intermédiaire (0,40–0,80, ceux qui tirent `guess` vers le haut), le taux de réussite ne monte pas entre première et seconde moitié de la période (delta moyen −0,020, 47 % seulement en hausse), et ce résultat (déjà négatif) ne survit à aucun degré au contrôle par permutation temporelle (hypergéométrique exact, p = 1). **Écartée**, avec la même rigueur que D1. D2.2/D2.3 (calibration par fenêtre, borne sur le gain potentiel), conditionnées à un résultat positif de D2.1, non lancées.
+
+**Les deux candidats identifiés jusqu'ici sont maintenant tous deux écartés par des tests directs.** La cause du `guess` élevé reste ouverte — ce n'est plus une piste non explorée, c'est une énigme non résolue malgré une recherche active. À documenter comme telle dans le rapport (limite mesurée, pas une limite par manque de temps).
+
 ---
 
 ## 5. Pièges déjà rencontrés — pour ne pas les refaire

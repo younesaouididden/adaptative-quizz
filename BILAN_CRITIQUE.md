@@ -43,9 +43,9 @@ La piste A calibre des paramètres sur des données réelles, mais produit un `g
 
 ### 3.2 — La cause du `guess` élevé reste inconnue
 
-Le test D1 a **écarté** l'hétérogénéité par granularité (subdiviser `arithmetic` ne fait pas baisser `guess` ; le fit isolé retombe sur le fit joint). C'est un résultat solide — mais rien ne l'a remplacée. On sait ce que ce n'est pas, pas ce que c'est.
+Le test D1 a **écarté** l'hétérogénéité par granularité (subdiviser `arithmetic` ne fait pas baisser `guess` ; le fit isolé retombe sur le fit joint). Le test D2.1 (`PROMPT_D2_HYPOTHESE_Z.md`, `results/d2_1_signature_temporelle/`) a **écarté** l'hypothèse `z` fixe : chez les étudiants à taux de réussite intermédiaire (0,40–0,80, ceux qui tirent `guess` vers le haut dans l'EM), le taux de réussite ne progresse pas entre la première et la seconde moitié de leur période d'activité (delta moyen −0,020 sur 41 246 couples étudiant-concept, 47 % seulement en hausse) — et ce résultat, déjà nul voire négatif, ne survit à aucun degré au contrôle par permutation temporelle (p = 1). Ce n'est donc pas non plus un artefact d'apprentissage intra-fenêtre.
 
-**Piste candidate jamais testée** : l'hypothèse `z` fixe elle-même. Les logs couvrent 2012–2015 ; un étudiant qui apprend en cours de route réussit des exercices « sans maîtriser » au sens d'un modèle statique — ce qui se traduirait mécaniquement par un `guess` gonflé. C'est cohérent avec l'ordre de grandeur observé et testable (comparer le `guess` calibré sur une fenêtre temporelle courte vs longue). Ce serait le prochain test naturel s'il restait du temps.
+**Les deux candidats identifiés étaient les seuls avancés jusqu'ici, et les deux sont maintenant écartés par des tests directs, pas par manque de temps.** On sait ce que ce n'est pas (granularité, apprentissage temporel), pas ce que c'est. La piste D2.3 du document de passation (borner le gain potentiel sous un modèle à une transition de `z`) reste ouverte mais n'a de sens que si une nouvelle hypothèse candidate émerge — ce n'était pas le cas de D2.1, donc D2.2/D2.3 n'ont pas été lancées (conditionnées à un résultat positif de D2.1). À présenter dans le rapport comme un résultat négatif doublement mesuré, pas comme une limite non explorée.
 
 ### 3.3 — La baseline CAT-IRT est faible par construction
 
@@ -81,9 +81,9 @@ Junyi15 : un seul contexte (Taïwan, plateforme unique), une seule période (201
 
 `results/` est tracé (graines, commits, logs d'exécution), mais les données brutes (1,2 Go) et les fichiers `.parquet` dérivés sont hors git. Reproduire depuis zéro suppose de retélécharger le dataset.
 
-### 3.11 — Tout le travail récent vit sur une branche
+### 3.11 — ~~Tout le travail récent vit sur une branche~~ (réglé)
 
-Les Lots 1 à 4 (9 commits) sont sur `lot5-vocabulaire-theorie`. `master` est resté à l'état « version montrable » d'avant. Quelqu'un qui clone le dépôt et regarde `master` ne voit **aucun** des résultats des Lots 1-4. À régler avant tout partage du dépôt.
+Les Lots 1 à 4 étaient sur `lot5-vocabulaire-theorie`, `master` restait à l'état d'avant. **Fusionné** (commit `b28dabb`) : `master` porte désormais l'intégralité des Lots 0-5 et de D2.1.
 
 ---
 
@@ -92,14 +92,14 @@ Les Lots 1 à 4 (9 commits) sont sur `lot5-vocabulaire-theorie`. `master` est re
 | Priorité | Tâche | Effort | Qui |
 |---|---|---|---|
 | **1** | **Rédiger le rapport** (partie code : plan validé, ~25-30 p) | Élevé | Younes + Yassine |
-| **2** | Fusionner `lot5-vocabulaire-theorie` dans `master` | Faible | — |
-| **3** | Redéployer l'app Streamlit (tourne encore sur l'ancien domaine) | Faible | Younes |
-| **4** | Ouvrir l'accès du collègue | Faible | Younes |
-| 5 | *(si temps)* Tester l'hypothèse `z` évolutif comme cause du `guess` élevé (§3.2) | Moyen | — |
-| 6 | *(si temps)* Calibrer honnêtement `a`/`b` de la baseline IRT sur Junyi (§3.3) | Moyen | — |
-| 7 | *(cosmétique)* Point 1.5 du Lot 1 : figure \|Z\| vs nombre de concepts | Faible | — |
+| **2** | Redéployer l'app Streamlit (tourne encore sur l'ancien domaine) | Faible | Younes |
+| **3** | Ouvrir l'accès du collègue | Faible | Younes |
+| 4 | *(si temps)* Calibrer honnêtement `a`/`b` de la baseline IRT sur Junyi (§3.3) | Moyen | — |
+| 5 | *(cosmétique)* Point 1.5 du Lot 1 : figure \|Z\| vs nombre de concepts | Faible | — |
 
-Les points 5 et 6 renforceraient nettement le mémoire mais ne sont **pas** des prérequis pour rendre : les deux faiblesses correspondantes sont documentables comme limites assumées.
+~~Fusionner `lot5-vocabulaire-theorie` dans `master`~~ : **fait** (commit `b28dabb`). ~~Tester l'hypothèse `z` évolutif comme cause du `guess` élevé~~ : **fait, résultat négatif** (D2.1, §3.2) — ce n'est plus une tâche en attente mais un résultat acquis.
+
+Le point 4 renforcerait le mémoire mais n'est **pas** un prérequis pour rendre : la faiblesse correspondante (§3.3) est documentable comme limite assumée.
 
 ---
 

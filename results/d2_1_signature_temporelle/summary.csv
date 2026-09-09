@@ -1,0 +1,11 @@
+metrique,valeur
+n_pairs_total,379374
+n_pairs_retained,136228
+n_pairs_in_band,41246
+delta_moyen,-0.020265
+delta_median,-0.015963
+fraction_positive,0.469864
+null_moyen,-0.000000
+null_ecart_type,0.000913
+p_value_unilaterale,1
+verdict,D2 REJETEE : pas de hausse temporelle systematique et substantielle qui survit au controle (delta moyen=-0.0203, p=1) -- l'hypothese temporelle est morte, cf. section 5 du document de passation

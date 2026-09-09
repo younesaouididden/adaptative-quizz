@@ -1,0 +1,15 @@
+date (UTC)             : 2026-09-09T19:23:33.724882+00:00
+commande               : python d2_1_signature_temporelle.py
+commit git             : b28dabb
+source                 : data\responses.parquet
+seuil n_total >=       : 20 (pre-enregistre)
+bande intermediaire    : (0.4, 0.8) (pre-enregistre)
+couples (etu,concept) au total (avant filtre) : 379374
+couples retenus (n_total>=seuil, splittable)  : 136228
+couples dans la bande intermediaire (analyse) : 41246
+controle               : hypergeometrique exact, 5000 replications, seed=0
+delta moyen observe    : -0.020265
+p-value (unilaterale)  : 1
+critere pre-enregistre : delta>=0.05 ET p<0.01
+
+VERDICT : D2 REJETEE : pas de hausse temporelle systematique et substantielle qui survit au controle (delta moyen=-0.0203, p=1) -- l'hypothese temporelle est morte, cf. section 5 du document de passation
